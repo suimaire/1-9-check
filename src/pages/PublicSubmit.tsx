@@ -93,6 +93,8 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
   // 같은 학번·날짜·이미지의 재시도는 같은 request_id로 보내 중복 접수를 막는다
   const pending = useRef<{ requestId: string; key: string } | null>(null);
   const inFlight = useRef(false);
+  const [confirming, setConfirming] = useState(false);
+  const noInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => revokeUrl(previewUrl), [previewUrl]);
 
@@ -139,7 +141,20 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
     await accept(new File([blob], 'synthetic.png', { type: 'image/png' }));
   }
 
+  // 제출 전 학번 확인: 기존 검증을 통과한 경우에만 확인창을 띄운다
+  function askConfirm() {
+    if (!validNo) return setShowErrors(true);
+    if (!image || inFlight.current || !selfMinutes.valid || note.length > 100) return;
+    setConfirming(true);
+  }
+
+  function cancelConfirm() {
+    setConfirming(false);
+    noInput.current?.focus();
+  }
+
   async function submit() {
+    setConfirming(false);
     if (!validNo) return setShowErrors(true);
     if (!image || inFlight.current || !selfMinutes.valid || note.length > 100) return;
     inFlight.current = true;
@@ -178,6 +193,7 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
         <label className="field">
           학번
           <input
+            ref={noInput}
             type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" maxLength={5} placeholder="예: 10901"
             value={studentNo} disabled={busy} aria-invalid={!!noError}
             onChange={(e) => { setStudentNo(e.target.value.replace(/\s/g, '')); resetAttempt(); }}
@@ -284,7 +300,7 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
             )}
 
             <div className="submit-bar stack" style={{ gap: 8 }}>
-              <button className="btn primary lg block" onClick={() => void submit()} disabled={busy || !selfMinutes.valid}>
+              <button className="btn primary lg block" onClick={askConfirm} disabled={busy || !selfMinutes.valid}>
                 {phase.kind === 'sending' ? '제출 중…' : phase.kind === 'failed' ? '다시 시도' : isReplace ? '이 이미지로 교체' : '제출하기'}
               </button>
               <button className="btn block" disabled={busy} onClick={() => { setImage(null); pending.current = null; setPhase({ kind: 'idle' }); }}>
@@ -294,6 +310,8 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
           </div>
         )}
       </section>
+
+      {confirming && <ConfirmStudentNo studentNo={studentNo} disabled={busy} onCancel={cancelConfirm} onConfirm={() => void submit()} />}
 
       <details className="fold">
         <summary>어떤 화면을 올리나요?</summary>
@@ -308,5 +326,33 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
         </div>
       </details>
     </>
+  );
+}
+
+function ConfirmStudentNo({ studentNo, disabled, onCancel, onConfirm }: {
+  studentNo: string; disabled: boolean; onCancel: () => void; onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCancel();
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onCancel]);
+  return (
+    <div className="modal-backdrop centered" onClick={onCancel}>
+      <div className="modal confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-no-title" aria-describedby="confirm-no-body"
+        onClick={(e) => e.stopPropagation()}>
+        <h2 id="confirm-no-title">학번을 확인해 주세요</h2>
+        <p id="confirm-no-body">입력한 학번이 <strong className="confirm-no">{studentNo}</strong>이 맞나요?</p>
+        <div className="confirm-actions">
+          <button className="btn lg" onClick={onCancel}>아니요, 수정할게요</button>
+          <button className="btn primary lg" onClick={onConfirm} disabled={disabled} autoFocus>네, 맞아요</button>
+        </div>
+      </div>
+    </div>
   );
 }
