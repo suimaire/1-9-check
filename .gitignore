@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env*
+!.env.example
+!.env.demo
+supabase/.temp/
+supabase/functions/.env
+# 실제 학생 명단·발급 비밀번호·이미지는 저장소에 넣지 않는다
+*.roster.csv
+roster*.csv
+accounts*.csv
+private/
+*.local
+verification.local/**/TEST_CREDENTIALS.txt
+
+# 로컬 검증 산출물(자격 증명·DB 비밀번호·스크린샷)
+verification.local/

@@ -1,0 +1,39 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "1-9-check",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--strictPort"
+      ],
+      "port": 4310,
+      "autoPort": true
+    },
+    {
+      "name": "1-9-check-live",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--port",
+        "4320",
+        "--strictPort"
+      ],
+      "port": 4320
+    },
+    {
+      "name": "1-9-check-demo",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--mode",
+        "demo",
+        "--port",
+        "4321",
+        "--strictPort"
+      ],
+      "port": 4321
+    }
+  ]
+}

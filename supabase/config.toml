@@ -1,0 +1,24 @@
+# Supabase CLI 설정(필요한 부분만). [auth] 값은 로컬 개발 스택에만 적용되며,
+# 호스팅 프로젝트는 대시보드에서 같은 값으로 맞춘다(README 참고).
+# 함수는 내부에서 Authorization 토큰을 Auth 서버로 직접 검증한다(새 API 키 체계와 호환).
+project_id = "1-9-check"
+
+[auth]
+enable_signup = false
+
+# [auth.email].enable_signup은 이메일 로그인 자체(external_email_enabled)를 끄므로 두지 않는다.
+# 공개 가입 차단은 위 [auth].enable_signup = false로 한다(관리자 생성 계정만 로그인).
+[auth.email]
+enable_confirmations = false
+
+[functions.login-resolve]
+verify_jwt = false
+
+[functions.account]
+verify_jwt = false
+
+[functions.submit]
+verify_jwt = false
+
+[functions.teacher-admin]
+verify_jwt = false
