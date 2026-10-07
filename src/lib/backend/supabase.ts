@@ -6,7 +6,7 @@ import {
 import type {
   ClassInfo, Excuse, Exemption, Me, Student, Submission, TeacherNote, Term, TermDay,
 } from '../types.ts';
-import { extFor, pickTerm } from './common.ts';
+import { attachImages, extFor, pickTerm, type SubmissionImageRow } from './common.ts';
 import {
   BackendError, type Backend, type PublicInfo, type PublicSubmitResult, type TeacherData,
 } from './types.ts';
@@ -156,7 +156,10 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
       if (input.token) form.append('replacement_token', input.token);
       if (input.selfMinutes !== null) form.append('self_minutes', String(input.selfMinutes));
       if (input.note) form.append('note', input.note);
-      form.append('file', new File([input.blob], `screenshot.${extFor(input.mime)}`, { type: input.mime }));
+      // 같은 key(files)를 반복 — 순서가 사진 순서다
+      input.images.forEach((img, i) => {
+        form.append('files', new File([img.blob], `screenshot-${i + 1}.${extFor(img.mime)}`, { type: img.mime }));
+      });
       return invoke<PublicSubmitResult>('submit', form);
     },
 
@@ -175,12 +178,17 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
       const term = (termId && terms.find((t) => t.id === termId)) || pickTerm(terms, now);
       const students = await fetchAll<Student>((a, b) => sb.from('students').select('id, class_id, student_no, name, active, roster_from, roster_until').eq('class_id', classId).order('student_no').range(a, b));
       if (!term) return { klass, terms, term: null, days: [], students, submissions: [], excuses: [], exemptions: [] };
-      const [days, submissions, excuses, exemptions] = await Promise.all([
+      // 사진은 경로·크기 같은 목록만 받는다. 이미지 파일은 화면에 보일 때만 하나씩 내려받는다.
+      const [days, subRows, imageRows, excuses, exemptions] = await Promise.all([
         fetchAll<TermDay>((a, b) => sb.from('term_days').select('*').eq('term_id', term.id).order('record_date').range(a, b)),
-        fetchAll<Submission>((a, b) => sb.from('submissions').select(SUBMISSION_COLS).eq('term_id', term.id).order('id').range(a, b)),
+        fetchAll<Omit<Submission, 'images'>>((a, b) => sb.from('submissions').select(SUBMISSION_COLS).eq('term_id', term.id).order('id').range(a, b)),
+        fetchAll<SubmissionImageRow>((a, b) => sb.from('submission_images')
+          .select('id, submission_id, image_version, sort_order, storage_path, image_mime, image_bytes, submissions!inner(term_id)')
+          .eq('submissions.term_id', term.id).order('id').range(a, b)),
         fetchAll<Excuse>((a, b) => sb.from('excuse_requests').select('*').eq('term_id', term.id).order('id').range(a, b)),
         fetchAll<Exemption>((a, b) => sb.from('exemptions').select('term_id, student_id, record_date, reason').eq('term_id', term.id).order('record_date').range(a, b)),
       ]);
+      const submissions = attachImages(subRows, imageRows);
       return { klass, terms, term, days, students, submissions, excuses, exemptions };
     },
 

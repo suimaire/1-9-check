@@ -53,7 +53,7 @@ const student = createSupabaseBackend(URL_, PUB); // 로그인하지 않은 공�
 const info = await student.publicInfo();
 const DATE = args.date ?? info.open_days?.[0]?.record_date;
 check('공개 일정 조회(submit info) — 학생 이름 없음', info.ready && !!DATE && !JSON.stringify(info).includes('학생 0'), `기록일 ${DATE}`);
-const input = (o) => ({ studentNo: NO, recordDate: DATE, blob: png(1), mime: 'image/png', requestId: crypto.randomUUID(), token: null, selfMinutes: null, note: null, ...o });
+const input = (o) => ({ studentNo: NO, recordDate: DATE, images: [{ blob: png(1), mime: 'image/png' }], requestId: crypto.randomUUID(), token: null, selfMinutes: null, note: null, ...o });
 
 // C) 범위 밖 학번
 check('C 10935 → 서버 거절', (await code(student.publicSubmit(input({ studentNo: '10935' })))) === 'invalid_student_no');
@@ -74,8 +74,8 @@ if (firstTry instanceof BackendError && firstTry.code === 'already_submitted') {
 }
 
 // F) token 없이 / 틀린 token으로 덮어쓰기
-check('F token 없이 같은 날짜 덮어쓰기 거절', (await code(student.publicSubmit(input({ blob: png(2) })))) === 'already_submitted');
-check('F 틀린 token 거절', (await code(student.publicSubmit(input({ blob: png(2), token: 'f'.repeat(64) })))) === 'already_submitted');
+check('F token 없이 같은 날짜 덮어쓰기 거절', (await code(student.publicSubmit(input({ images: [{ blob: png(2), mime: 'image/png' }] })))) === 'already_submitted');
+check('F 틀린 token 거절', (await code(student.publicSubmit(input({ images: [{ blob: png(2), mime: 'image/png' }], token: 'f'.repeat(64) })))) === 'already_submitted');
 
 // B·H) 교사 Auth·대시보드
 const teacher = createSupabaseBackend(URL_, PUB);
@@ -93,7 +93,7 @@ check('B 교사 세션으로 비공개 이미지 열람', !!img && img.size > 0)
 // G) 올바른 token으로 교체
 if (token && sub) {
   await teacher.reviewSubmission(sub.id, sub.image_version, 'checked', '');
-  const rep = await student.publicSubmit(input({ blob: png(3), token }));
+  const rep = await student.publicSubmit(input({ images: [{ blob: png(3), mime: 'image/png' }], token }));
   t = await teacher.loadTeacherData();
   const after = t.submissions.find((x) => x.id === sub.id);
   check('G 올바른 token 교체 성공', rep.replaced && rep.version === sub.image_version + 1);

@@ -1,7 +1,7 @@
 // 데모 백엔드: 브라우저 메모리에서만 동작(네트워크·운영 저장소와 완전히 분리).
 // 서버와 같은 규칙(제출 창·버전 비교·재시도 멱등성·교사 버전 확인)을 흉내 낸다.
 import { canSubmitDay } from '../status.ts';
-import type { Me, Submission } from '../types.ts';
+import { MAX_IMAGES, type Me, type Submission } from '../types.ts';
 import { pickTerm, uuid } from './common.ts';
 import {
   buildDemoStore, DEMO_CLASS_ID, DEMO_CLOCKS, renderSyntheticScreenshot, type DemoStore,
@@ -94,10 +94,11 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       if (existing) return existing;
       const [, sid, date] = path.split('/');
       const s = store.students.find((x) => x.id === sid);
-      const sub = store.submissions.find((x) => x.image_path === path);
+      const sub = store.submissions.find((x) => x.images.some((i) => i.path === path));
       if (!s || !sub) throw new BackendError('not_found');
       if (me?.role !== 'teacher') throw new BackendError('not_allowed');
-      const blob = await renderSyntheticScreenshot(s.name, date, sub.self_minutes ?? 95 + (date.charCodeAt(9) * 7) % 200);
+      const page = sub.images.find((i) => i.path === path)!.sort_order;
+      const blob = await renderSyntheticScreenshot(s.name, date, sub.self_minutes ?? 95 + (date.charCodeAt(9) * 7) % 200, page);
       store.images.set(path, blob);
       return blob;
     },
@@ -136,7 +137,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       const result = (sub: Submission, replayed: boolean, replaced: boolean, token?: string): PublicSubmitResult => {
         const day = store.days.find((d) => d.record_date === sub.record_date)!;
         return {
-          replayed, replaced, record_date: sub.record_date, version: sub.image_version,
+          replayed, replaced, record_date: sub.record_date, version: sub.image_version, image_count: sub.images.length,
           first_submitted_at: sub.first_submitted_at, deadline_at: day.deadline_at,
           late: Date.parse(sub.first_submitted_at) > Date.parse(day.deadline_at),
           ...(token ? { replacement_token: token } : {}),
@@ -155,15 +156,20 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       assertSubmittable(s.id, t.id, input.recordDate);
       if (input.selfMinutes !== null && (input.selfMinutes < 0 || input.selfMinutes > 1440)) throw new BackendError('bad_minutes');
       if ((input.note ?? '').length > 100) throw new BackendError('note_too_long');
+      if (input.images.length === 0) throw new BackendError('no_image');
+      if (input.images.length > MAX_IMAGES) throw new BackendError('too_many_images');
 
       const ts = new Date(now()).toISOString();
-      const path = `demo/${s.id}/${input.recordDate}/${uuid()}`;
+      const set = uuid();
+      const images = input.images.map((img, i) => ({
+        path: `demo/${s.id}/${input.recordDate}/${set}/p${i + 1}`, mime: img.mime, bytes: img.blob.size, sort_order: i + 1,
+      }));
       let sub = store.submissions.find((x) => x.student_id === s.id && x.term_id === t.id && x.record_date === input.recordDate);
       let token: string | undefined;
       if (!sub) {
         sub = {
           id: `sub-${uuid()}`, term_id: t.id, student_id: s.id, record_date: input.recordDate,
-          image_path: path, image_version: 1, image_mime: input.mime, image_bytes: input.blob.size,
+          image_path: images[0].path, image_version: 1, image_mime: images[0].mime, image_bytes: images[0].bytes, images,
           first_submitted_at: ts, image_updated_at: ts, self_minutes: input.selfMinutes,
           student_note: input.note?.trim() || null, review_status: 'unchecked', reviewed_version: null,
           revision_message: null, reviewed_at: null, resubmit_open: false,
@@ -174,16 +180,16 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
         const tokenOk = !!input.token && store.tokens.get(sub.id) === input.token;
         if (!tokenOk && !sub.resubmit_open) throw new BackendError('already_submitted');
         if (!tokenOk) token = newToken();
-        store.images.delete(sub.image_path); // 데모: 교체 전 이미지는 바로 정리
+        for (const old of sub.images) store.images.delete(old.path); // 데모: 교체 전 사진 세트는 바로 정리
         Object.assign(sub, {
-          image_path: path, image_version: sub.image_version + 1, image_mime: input.mime, image_bytes: input.blob.size,
+          images, image_path: images[0].path, image_version: sub.image_version + 1, image_mime: images[0].mime, image_bytes: images[0].bytes,
           image_updated_at: ts, self_minutes: input.selfMinutes, student_note: input.note?.trim() || null,
           review_status: 'unchecked', reviewed_version: null, reviewed_at: null, resubmit_open: false,
         });
       }
       if (token) store.tokens.set(sub.id, token);
-      store.images.set(path, input.blob);
-      store.events.set(input.requestId, { submissionId: sub.id, version: sub.image_version, path, issuedToken: !!token });
+      images.forEach((img, i) => store.images.set(img.path, input.images[i].blob));
+      store.events.set(input.requestId, { submissionId: sub.id, version: sub.image_version, issuedToken: !!token });
       if (failure === 'confirm_lost') {
         // 서버는 반영했지만 응답이 유실된 상황
         controls.setFailure('none');
@@ -343,7 +349,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
         exemptions: store.exemptions.filter((x) => x.term_id === termId).length,
         teacher_notes: store.notes.filter((x) => x.term_id === termId).length,
         term_days: store.days.filter((x) => x.term_id === termId).length,
-        objects: subs.length,
+        objects: subs.reduce((n, x) => n + x.images.length, 0),
       };
     },
 

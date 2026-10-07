@@ -35,8 +35,8 @@ export interface PublicInfo {
 export interface PublicSubmitInput {
   studentNo: string;
   recordDate: string;
-  blob: Blob;
-  mime: string;
+  /** 사진 세트(1~3장, 순서대로). 각 사진은 브라우저에서 압축·메타데이터 제거된 것 */
+  images: Array<{ blob: Blob; mime: string }>;
   /** 같은 제출 시도(재시도 포함)에서 유지되는 값 */
   requestId: string;
   /** 이 기기에 저장된 replacement token(없으면 null) */
@@ -50,6 +50,8 @@ export interface PublicSubmitResult {
   replaced: boolean;
   record_date: string;
   version: number;
+  /** 접수된 사진 수(현재 버전) */
+  image_count?: number;
   first_submitted_at: string;
   deadline_at: string;
   late: boolean;

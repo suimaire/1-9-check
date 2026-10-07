@@ -1,4 +1,4 @@
-// 공개 제출 화면(학생 로그인 없음): 학번 → 이미지 선택 → 미리보기 → 제출.
+// 공개 제출 화면(학생 로그인 없음): 학번 → 사진 1~3장 선택(썸네일·삭제) → 제출 → 학번 확인 → 사진 세트 제출.
 // 브라우저는 submit 함수만 호출하고, 학번·날짜·파일 검증과 제출 판정은 서버가 한다.
 // 학번만으로 학생 이름이나 제출 여부를 조회하지 않는다. '이미 냈음' 표시는 이 기기의 기록으로만 한다.
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -8,6 +8,7 @@ import { DemoBar, ErrorBanner, Spinner, TopBar, useAsync } from '../components/u
 import { renderSyntheticScreenshot } from '../lib/backend/demoData.ts';
 import { BackendError, type PublicInfo, type PublicSubmitResult } from '../lib/backend/types.ts';
 import { fmtBytes, ImageError, prepareImage, type PreparedImage } from '../lib/image.ts';
+import { MAX_IMAGES } from '../lib/types.ts';
 import { addDays, fmtDate, fmtDateTime, kstDateOf } from '../lib/kst.ts';
 import {
   getLastStudentNo, getReceipt, getToken, saveLastStudentNo, saveReceipt, saveToken, STUDENT_NOS,
@@ -17,6 +18,12 @@ import { createTrackedUrl, revokeUrl } from '../lib/objectUrls.ts';
 
 const TITLE = '1-9 체크';
 const SUBTITLE = '시험기간 스크린타임 인증';
+
+interface Picked {
+  id: string;
+  image: PreparedImage;
+  url: string;
+}
 
 type Phase =
   | { kind: 'idle' }
@@ -82,21 +89,23 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
   const [studentNo, setStudentNo] = useState(getLastStudentNo);
   const [recordDate, setRecordDate] = useState(days[0].record_date);
   const [showErrors, setShowErrors] = useState(false);
-  const [image, setImage] = useState<PreparedImage | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // 선택한 사진(선택한 순서 = 사진 1·2·3). 학번 확인창에서 '수정할게요'를 눌러도 그대로 둔다.
+  const [picked, setPicked] = useState<Picked[]>([]);
+  const pickedRef = useRef(picked);
+  pickedRef.current = picked;
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [pickError, setPickError] = useState<string | null>(null);
   const [hours, setHours] = useState('');
   const [mins, setMins] = useState('');
   const [note, setNote] = useState('');
   const [, setSaved] = useState(0);
-  // 같은 학번·날짜·이미지의 재시도는 같은 request_id로 보내 중복 접수를 막는다
+  // 같은 학번·날짜·사진 세트의 재시도는 같은 request_id로 보내 중복 접수를 막는다
   const pending = useRef<{ requestId: string; key: string } | null>(null);
   const inFlight = useRef(false);
   const [confirming, setConfirming] = useState(false);
   const noInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => () => revokeUrl(previewUrl), [previewUrl]);
+  useEffect(() => () => pickedRef.current.forEach((p) => revokeUrl(p.url)), []);
 
   const day = days.find((d) => d.record_date === recordDate) ?? days[0];
   const validNo = STUDENT_NOS.has(studentNo);
@@ -121,30 +130,51 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
     if (phase.kind === 'failed' || phase.kind === 'done') setPhase({ kind: 'idle' });
   }
 
-  async function accept(file: File) {
+  // 한 번에 여러 장 또는 한 장씩 여러 번 추가. 합계 3장을 넘기면 아무것도 추가하지 않고 알려 준다.
+  async function accept(files: File[]) {
     setPickError(null);
-    setPhase({ kind: 'preparing' });
-    try {
-      const prepared = await prepareImage(file);
-      setImage(prepared);
-      setPreviewUrl(createTrackedUrl(prepared.blob));
-      pending.current = null; // 새 이미지 = 새 제출 시도
-      setPhase({ kind: 'idle' });
-    } catch (err) {
-      setPickError(err instanceof ImageError ? err.message : '이미지를 처리하지 못했습니다.');
-      setPhase({ kind: 'idle' });
+    if (files.length === 0) return;
+    const room = MAX_IMAGES - picked.length;
+    if (files.length > room) {
+      setPickError(`사진은 최대 ${MAX_IMAGES}장까지 제출할 수 있습니다.${room > 0 ? ` 지금은 ${room}장만 더 추가할 수 있어요.` : ''}`);
+      return;
     }
+    setPhase({ kind: 'preparing' });
+    const added: Picked[] = [];
+    let failure: string | null = null;
+    for (const file of files) {
+      try {
+        const image = await prepareImage(file);
+        added.push({ id: crypto.randomUUID(), image, url: createTrackedUrl(image.blob) });
+      } catch (err) {
+        failure = err instanceof ImageError ? err.message : '이미지를 처리하지 못했습니다.';
+      }
+    }
+    if (added.length) {
+      setPicked((prev) => [...prev, ...added]);
+      pending.current = null; // 사진 세트가 바뀌면 새 제출 시도
+    }
+    if (failure) setPickError(added.length ? `일부 사진을 추가하지 못했습니다. ${failure}` : failure);
+    setPhase({ kind: 'idle' });
+  }
+
+  function remove(id: string) {
+    const target = picked.find((p) => p.id === id);
+    if (target) revokeUrl(target.url);
+    setPicked((prev) => prev.filter((p) => p.id !== id));
+    setPickError(null);
+    resetAttempt();
   }
 
   async function makeSynthetic() {
-    const blob = await renderSyntheticScreenshot(`데모 ${studentNo || '학번'}`, day.record_date, 120 + Math.floor(Math.random() * 200));
-    await accept(new File([blob], 'synthetic.png', { type: 'image/png' }));
+    const blob = await renderSyntheticScreenshot(`데모 ${studentNo || '학번'}`, day.record_date, 120 + Math.floor(Math.random() * 200), picked.length + 1);
+    await accept([new File([blob], 'synthetic.png', { type: 'image/png' })]);
   }
 
   // 제출 전 학번 확인: 기존 검증을 통과한 경우에만 확인창을 띄운다
   function askConfirm() {
     if (!validNo) return setShowErrors(true);
-    if (!image || inFlight.current || !selfMinutes.valid || note.length > 100) return;
+    if (picked.length === 0 || inFlight.current || !selfMinutes.valid || note.length > 100) return;
     setConfirming(true);
   }
 
@@ -156,7 +186,7 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
   async function submit() {
     setConfirming(false);
     if (!validNo) return setShowErrors(true);
-    if (!image || inFlight.current || !selfMinutes.valid || note.length > 100) return;
+    if (picked.length === 0 || picked.length > MAX_IMAGES || inFlight.current || !selfMinutes.valid || note.length > 100) return;
     inFlight.current = true;
     const key = `${studentNo}|${day.record_date}`;
     if (pending.current?.key !== key) pending.current = { requestId: crypto.randomUUID(), key };
@@ -165,14 +195,16 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
     setPhase({ kind: 'sending' });
     try {
       const result = await backend.publicSubmit({
-        studentNo: no, recordDate: day.record_date, blob: image.blob, mime: image.mime, requestId: p.requestId,
+        studentNo: no, recordDate: day.record_date, requestId: p.requestId,
+        images: picked.map((x) => ({ blob: x.image.blob, mime: x.image.mime })),
         token: getToken(no, day.record_date), selfMinutes: selfMinutes.value, note: note.trim() || null,
       });
       if (result.replacement_token) saveToken(no, result.record_date, result.replacement_token);
       saveReceipt(no, result.record_date, { firstSubmittedAt: result.first_submitted_at, late: result.late, version: result.version });
       saveLastStudentNo(no);
       pending.current = null;
-      setImage(null);
+      picked.forEach((x) => revokeUrl(x.url));
+      setPicked([]);
       setPhase({ kind: 'done', result, studentNo: no });
       setSaved((x) => x + 1);
     } catch (err) {
@@ -222,9 +254,9 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
 
         {phase.kind === 'done' && (
           <div className="banner ok" role="status">
-            <strong>{phase.result.replayed ? '이미 접수된 제출입니다.' : phase.result.replaced ? '이미지가 교체되었습니다.' : '접수되었습니다.'}</strong>
+            <strong>{phase.result.replayed ? '이미 접수된 제출입니다.' : phase.result.replaced ? '사진이 교체되었습니다.' : '접수되었습니다.'}</strong>
             <p className="small">
-              {phase.studentNo} · {fmtDate(phase.result.record_date)} 기록 · 최초 접수 {fmtDateTime(Date.parse(phase.result.first_submitted_at))} · {phase.result.late ? '지각 접수' : '정시 접수'}
+              {phase.studentNo} · {fmtDate(phase.result.record_date)} 기록{phase.result.image_count ? ` · 사진 ${phase.result.image_count}장` : ''} · 최초 접수 {fmtDateTime(Date.parse(phase.result.first_submitted_at))} · {phase.result.late ? '지각 접수' : '정시 접수'}
             </p>
             <p className="xs">파일 접수 확인일 뿐, 사용 시간 내용을 자동 검증한 것은 아닙니다.</p>
           </div>
@@ -232,36 +264,68 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
         {phase.kind !== 'done' && receipt && (
           <div className="banner info small">
             이 기기에서 {fmtDate(day.record_date)} 기록을 이미 제출했습니다 (최초 접수 {fmtDateTime(Date.parse(receipt.firstSubmittedAt))} · {receipt.late ? '지각' : '정시'}).
-            {token ? ' 새 이미지를 고르면 교체됩니다.' : ' 교체하려면 담임 선생님께 알려 주세요.'}
+            {token ? ' 사진을 다시 골라 제출하면 사진 전체가 새 사진으로 교체됩니다.' : ' 교체하려면 담임 선생님께 알려 주세요.'}
           </div>
         )}
 
-        {!image && (
-          isDemo ? (
-            <div className="stack">
-              <div className="banner info small">데모에서는 개인 사진을 받지 않습니다. 합성 이미지로 제출 흐름을 체험합니다.</div>
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="row between">
+            <span className="strong">스크린타임 사진</span>
+            <span className="small muted">{picked.length}/{MAX_IMAGES}장</span>
+          </div>
+          {isDemo && picked.length === 0 && (
+            <div className="banner info small">데모에서는 개인 사진을 받지 않습니다. 합성 이미지로 제출 흐름을 체험합니다.</div>
+          )}
+          {picked.length === 0 ? (
+            isDemo ? (
               <button className="btn lg block" onClick={() => void makeSynthetic()} disabled={busy}>합성 스크린샷 만들기</button>
-            </div>
+            ) : (
+              <label className="picker" style={{ position: 'relative' }}>
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy}
+                  onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; void accept(fs); }} />
+                <strong>사진 선택</strong>
+                <span className="small muted">최대 {MAX_IMAGES}장 · 여러 장을 한 번에 골라도 됩니다</span>
+              </label>
+            )
           ) : (
-            <label className="picker" style={{ position: 'relative' }}>
-              <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy}
-                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void accept(f); }} />
-              <strong>스크린타임 이미지 선택</strong>
-              <span className="small muted">하루 전체 사용 기록 화면 1장 · JPEG·PNG·WebP</span>
-            </label>
-          )
-        )}
-        {phase.kind === 'preparing' && <Spinner label="이미지 준비 중(위치 정보 제거·압축)" />}
+            <div className="pick-grid">
+              {picked.map((p, i) => (
+                <div key={p.id} className="pick-item">
+                  <img src={p.url} alt={`사진 ${i + 1} 미리보기`} />
+                  <span className="thumb-no">{i + 1}</span>
+                  <button type="button" className="pick-remove" aria-label={`사진 ${i + 1} 삭제`} disabled={busy} onClick={() => remove(p.id)}>×</button>
+                </div>
+              ))}
+              {picked.length < MAX_IMAGES && (
+                isDemo ? (
+                  <button type="button" className="pick-add" disabled={busy} onClick={() => void makeSynthetic()}>
+                    <span style={{ fontSize: 28 }} aria-hidden="true">+</span><span className="small">합성 사진 추가</span>
+                  </button>
+                ) : (
+                  <label className="pick-add" aria-disabled={busy}>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy}
+                      onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; void accept(fs); }} />
+                    <span style={{ fontSize: 28 }} aria-hidden="true">+</span>
+                    <span className="small">사진 추가</span>
+                  </label>
+                )
+              )}
+            </div>
+          )}
+          <ul className="xs muted" style={{ margin: 0, paddingLeft: 18 }}>
+            <li>첫 번째 사진은 하루 전체 사용 시간 화면을 권장합니다.</li>
+            <li>앱별 사용 시간 등 추가 화면은 필요하면 더 올려 주세요. 최대 {MAX_IMAGES}장까지 제출할 수 있습니다.</li>
+            <li>개인 메시지·알림 내용 등 불필요한 개인정보는 가리고 제출해도 됩니다.</li>
+          </ul>
+        </div>
+        {phase.kind === 'preparing' && <Spinner label="사진 준비 중(위치 정보 제거·압축)" />}
         {pickError && <div className="banner error" role="alert">{pickError}</div>}
 
-        {image && previewUrl && (
+        {picked.length > 0 && (
           <div className="stack">
-            <div className="preview"><img src={previewUrl} alt="제출할 이미지 미리보기" /></div>
-            <div className="row between small muted">
-              <span>제출본 {fmtBytes(image.blob.size)} · {image.width}×{image.height}</span>
-              <span>원본 {fmtBytes(image.sourceBytes)}</span>
-            </div>
-            <p className="xs muted">글자가 흐리면 다시 선택하세요. 사진 위치·기기 정보 같은 부가 정보는 제거되었습니다.</p>
+            <p className="xs muted">
+              제출본 {fmtBytes(picked.reduce((n, p) => n + p.image.blob.size, 0))} · 글자가 흐린 사진은 ×로 지우고 다시 추가하세요. 사진 위치·기기 정보 같은 부가 정보는 제거되었습니다.
+            </p>
 
             <details className="fold">
               <summary>선택 입력 (총 사용 시간·한 줄 메모)</summary>
@@ -301,10 +365,7 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
 
             <div className="submit-bar stack" style={{ gap: 8 }}>
               <button className="btn primary lg block" onClick={askConfirm} disabled={busy || !selfMinutes.valid}>
-                {phase.kind === 'sending' ? '제출 중…' : phase.kind === 'failed' ? '다시 시도' : isReplace ? '이 이미지로 교체' : '제출하기'}
-              </button>
-              <button className="btn block" disabled={busy} onClick={() => { setImage(null); pending.current = null; setPhase({ kind: 'idle' }); }}>
-                다른 이미지 선택
+                {phase.kind === 'sending' ? '제출 중…' : phase.kind === 'failed' ? '다시 시도' : isReplace ? `사진 ${picked.length}장으로 교체` : `사진 ${picked.length}장 제출하기`}
               </button>
             </div>
           </div>
@@ -318,7 +379,7 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
         <div>
           {info.term?.instructions && <p className="small">{info.term.instructions}</p>}
           <ul className="small muted" style={{ margin: 0, paddingLeft: 18 }}>
-            <li>대표 스마트폰 1대의 <strong>전날 하루 전체(00:00~23:59)</strong> 기록 화면을 올립니다.</li>
+            <li>대표 스마트폰 1대의 <strong>전날 하루 전체(00:00~23:59)</strong> 기록 화면을 첫 번째 사진으로 올립니다.</li>
             <li><strong>날짜와 총 사용 시간</strong>이 잘 보이는지 확인해 주세요.</li>
             <li>앱 목록·알림 등은 휴대폰 사진 편집(자르기·가리기)으로 가린 뒤 올려도 됩니다.</li>
             <li>iPhone: 설정 › 스크린 타임 › 모든 활동 보기(일). Android: 설정 › 디지털 웰빙 및 자녀 보호 기능.</li>

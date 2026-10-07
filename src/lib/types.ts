@@ -50,6 +50,17 @@ export interface Student {
 
 export type ReviewStatus = 'unchecked' | 'checked' | 'revision_requested';
 
+/** 사진 세트의 사진 1장(현재 버전). 사진 순서는 1~3. */
+export interface SubmissionImage {
+  path: string;
+  mime: string;
+  bytes: number;
+  sort_order: number;
+}
+
+/** 하루 사진 수 상한 */
+export const MAX_IMAGES = 3;
+
 export interface Submission {
   id: string;
   term_id: string;
@@ -69,6 +80,11 @@ export interface Submission {
   reviewed_at: string | null;
   /** 담임이 '다른 기기 재제출 허용'을 켠 상태(token 없이 한 번 교체 가능) */
   resubmit_open: boolean;
+  /**
+   * 현재 버전의 사진 세트(1~3장, 순서대로). submission_images 행이 없던 예전 제출은
+   * image_path 1장으로 채운다. image_path·image_mime·image_bytes는 1번 사진 값(호환용).
+   */
+  images: SubmissionImage[];
 }
 
 export type ExcuseReason = 'no_device' | 'device_unavailable' | 'no_record' | 'other';

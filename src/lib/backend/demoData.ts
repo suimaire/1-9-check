@@ -27,7 +27,7 @@ export interface DemoStore {
   /** 합성 이미지 저장(경로 → Blob). 사용자가 고른 실제 사진은 받지 않는다. */
   images: Map<string, Blob>;
   /** 제출 요청 기록(재시도 멱등성) */
-  events: Map<string, { submissionId: string; version: number; path: string; issuedToken: boolean }>;
+  events: Map<string, { submissionId: string; version: number; issuedToken: boolean }>;
   /** 제출별 replacement token(데모: 메모리에만) */
   tokens: Map<string, string>;
 }
@@ -140,15 +140,20 @@ export function buildDemoStore(): DemoStore {
         updated = at + 3 * 3600000;
         review = 'unchecked';
       }
+      // 사진 1~3장이 섞이게(1장 위주)
+      const count = h % 5 < 2 ? 1 : h % 5 < 4 ? 2 : 3;
+      const images = Array.from({ length: count }, (_, i) => ({
+        path: `demo/${s.id}/${d}/v${version}/p${i + 1}`, mime: 'image/webp', bytes: 150000 + ((h >> (i + 2)) % 300000), sort_order: i + 1,
+      }));
       submissions.push({
         id: `sub-${k}`,
         term_id: DEMO_TERM_ID,
         student_id: s.id,
         record_date: d,
-        image_path: `demo/${s.id}/${d}/v${version}`,
+        image_path: images[0].path,
         image_version: version,
         image_mime: 'image/webp',
-        image_bytes: 180000 + (h % 300000),
+        image_bytes: images[0].bytes,
         first_submitted_at: iso(at),
         image_updated_at: iso(updated),
         self_minutes: h % 3 === 0 ? 60 + (h % 360) : null,
@@ -158,6 +163,7 @@ export function buildDemoStore(): DemoStore {
         revision_message: message,
         reviewed_at: review === 'unchecked' ? null : iso(at + 2 * 3600000),
         resubmit_open: false,
+        images,
       });
     }
   }
@@ -200,8 +206,8 @@ export function buildDemoStore(): DemoStore {
   };
 }
 
-/** 합성 스크린타임 이미지(실제 기기 화면 아님) */
-export async function renderSyntheticScreenshot(title: string, date: string, minutes: number): Promise<Blob> {
+/** 합성 스크린타임 이미지(실제 기기 화면 아님). page 2·3은 추가 화면 예시(앱 이름 없이). */
+export async function renderSyntheticScreenshot(title: string, date: string, minutes: number, page = 1): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1600;
@@ -215,6 +221,34 @@ export async function renderSyntheticScreenshot(title: string, date: string, min
   ctx.fillText('데모용 합성 이미지 · 실제 기록 아님', 72, 90);
   ctx.fillStyle = '#101828';
   ctx.font = 'bold 64px sans-serif';
+  if (page > 1) {
+    ctx.fillText(page === 2 ? '항목별 사용 시간 (예시)' : '시간대별 사용 (예시)', 96, 250);
+    ctx.font = '44px sans-serif';
+    ctx.fillStyle = '#475467';
+    ctx.fillText(`${date} · ${title} · 사진 ${page}`, 96, 330);
+    if (page === 2) {
+      ['항목 A', '항목 B', '항목 C', '항목 D', '항목 E'].forEach((label, i) => {
+        const v = [0.9, 0.6, 0.45, 0.3, 0.15][i] * (0.6 + ((minutes + i * 37) % 40) / 100);
+        ctx.fillStyle = '#344054';
+        ctx.font = '40px sans-serif';
+        ctx.fillText(label, 96, 470 + i * 160);
+        ctx.fillStyle = '#7a5af8';
+        ctx.fillRect(96, 500 + i * 160, 860 * v, 40);
+      });
+    } else {
+      for (let i = 0; i < 24; i++) {
+        const v = ((minutes * (i + 3)) % 97) / 97 * (i < 7 ? 0.2 : 1);
+        ctx.fillStyle = '#12b76a';
+        ctx.fillRect(96 + i * 38, 1200 - 600 * v, 26, 600 * v);
+      }
+      ctx.fillStyle = '#667085';
+      ctx.font = '32px sans-serif';
+      ['0시', '6시', '12시', '18시'].forEach((t, i) => ctx.fillText(t, 96 + i * 6 * 38, 1260));
+    }
+    return new Promise((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('canvas'))), 'image/png'),
+    );
+  }
   ctx.fillText('화면 시간', 96, 250);
   ctx.font = '44px sans-serif';
   ctx.fillStyle = '#475467';

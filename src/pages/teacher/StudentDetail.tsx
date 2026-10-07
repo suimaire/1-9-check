@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useBackend } from '../../app/context.tsx';
-import { ErrorBanner, ReviewChip, StateChip, useAsync } from '../../components/ui.tsx';
-import { addDays, fmtDate, fmtDateTime, fmtShortDateTime, kstDateOf } from '../../lib/kst.ts';
-import { cellKey, submitState, twoDayMissing } from '../../lib/status.ts';
-import { EXCUSE_LABEL } from '../../lib/types.ts';
+import { AuthImage, ErrorBanner, ReviewChip, StateChip, useAsync } from '../../components/ui.tsx';
+import { addDays, fmtDate, fmtDateTime, fmtShortDate, fmtShortDateTime, fmtTime, kstDateOf } from '../../lib/kst.ts';
+import { cellKey, STATE_LABEL, submitState, twoDayMissing } from '../../lib/status.ts';
+import { EXCUSE_LABEL, type Student } from '../../lib/types.ts';
 import { CellModal } from './CellModal.tsx';
 import { useTeacher } from './TeacherLayout.tsx';
 
@@ -12,7 +12,8 @@ export default function StudentDetail() {
   const { id } = useParams();
   const { data, board, now, reload } = useTeacher();
   const student = data.students.find((s) => s.id === id);
-  const [openDate, setOpenDate] = useState<string | null>(null);
+  const [open, setOpen] = useState<{ date: string; image: number } | null>(null);
+  const setOpenDate = (date: string) => setOpen({ date, image: 0 });
 
   if (!student) return <div className="card">학생을 찾을 수 없습니다. <Link to="/teacher/roster">명단으로</Link></div>;
   const term = data.term;
@@ -32,6 +33,8 @@ export default function StudentDetail() {
         </div>
       </div>
 
+      {term && <CompareSection student={student} onOpen={(date, image) => setOpen({ date, image })} />}
+
       {term ? (
         <section className="card stack">
           <h2>날짜별 기록</h2>
@@ -47,7 +50,7 @@ export default function StudentDetail() {
                   return (
                     <tr key={day.record_date} className="clickable" onClick={() => setOpenDate(day.record_date)}>
                       <td className="nowrap">{fmtDate(day.record_date)}</td>
-                      <td><StateChip state={state} /></td>
+                      <td className="nowrap"><StateChip state={state} />{sub && <span className="xs muted"> 사진 {sub.images.length}장</span>}</td>
                       <td className="hide-sm mono small nowrap">{sub ? fmtShortDateTime(Date.parse(sub.first_submitted_at)) : '–'}</td>
                       <td>{sub ? <ReviewChip status={sub.review_status} /> : <span className="faint">–</span>}</td>
                       <td className="small">
@@ -67,8 +70,76 @@ export default function StudentDetail() {
       {term && <NotesPanel studentId={student.id} termId={term.id} />}
       <ActivePanel studentId={student.id} active={student.active} now={now} onDone={reload} />
 
-      {openDate && <CellModal student={student} date={openDate} onClose={() => setOpenDate(null)} />}
+      {open && <CellModal key={`${open.date}:${open.image}`} student={student} date={open.date} initialImage={open.image} onClose={() => setOpen(null)} />}
     </div>
+  );
+}
+
+/**
+ * 사용 기록 비교: 한 학생의 최근 7일/14일 원본 사진을 날짜별로 나란히 놓는다(왼쪽이 오래된 날).
+ * 사진 k번은 같은 줄에 맞춰 보이고, 미제출·면제 날짜도 빈 칸으로 남겨 날짜 흐름을 유지한다.
+ * 자동 분석·점수·평가는 하지 않는다. 사진은 이 화면에서 보이는 칸만 내려받는다.
+ */
+function CompareSection({ student, onOpen }: { student: Student; onOpen: (date: string, image: number) => void }) {
+  const { data, board, now } = useTeacher();
+  const [span, setSpan] = useState<7 | 14>(7);
+  const scroller = useRef<HTMLDivElement>(null);
+  // 하루가 끝나 제출 창이 열린 날짜까지만(오늘처럼 아직 끝나지 않은 날 제외)
+  const days = data.days.filter((d) => now >= Date.parse(d.window_open_at)).slice(-span);
+  const cells = days.map((day) => {
+    const k = cellKey(student.id, day.record_date);
+    const sub = board.submissions.get(k) ?? null;
+    return { day, sub, state: submitState({ day, student, exempt: board.exemptions.has(k), submission: sub, now }) };
+  });
+  const rows = Math.max(1, ...cells.map((c) => c.sub?.images.length ?? 0));
+
+  // 가장 최근 날짜가 보이도록 오른쪽 끝으로
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [span, days.length]);
+
+  return (
+    <section className="card stack">
+      <div className="row between">
+        <h2>사용 기록 비교</h2>
+        <div className="filters" role="group" aria-label="비교 기간">
+          {([7, 14] as const).map((n) => (
+            <button key={n} aria-pressed={span === n} onClick={() => setSpan(n)}>최근 {n}일</button>
+          ))}
+        </div>
+      </div>
+      {cells.length === 0 ? (
+        <p className="small muted">아직 비교할 날짜가 없습니다.</p>
+      ) : (
+        <div className="compare" ref={scroller} style={{ ['--rows' as string]: rows }}>
+          {cells.map(({ day, sub, state }) => (
+            <div key={day.record_date} className="cmp-col">
+              <div className="cmp-head">
+                <strong>{fmtShortDate(day.record_date)}</strong>
+                <StateChip state={state} short />
+                <span className="xs muted">{sub ? `사진 ${sub.images.length}장 · ${fmtTime(Date.parse(sub.first_submitted_at))}` : ' '}</span>
+              </div>
+              {sub ? (
+                Array.from({ length: rows }, (_, i) => {
+                  const img = sub.images[i];
+                  return img ? (
+                    <button key={img.path} type="button" className="cmp-thumb" onClick={() => onOpen(day.record_date, i)}
+                      aria-label={`${fmtDate(day.record_date)} 사진 ${i + 1}/${sub.images.length} 크게 보기`}>
+                      <AuthImage path={img.path} alt="" lazy />
+                      <span className="thumb-no">{i + 1}</span>
+                    </button>
+                  ) : <div key={i} className="cmp-empty" aria-hidden="true">–</div>;
+                })
+              ) : (
+                <div className="cmp-blank">{STATE_LABEL[state]}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="xs muted">학생이 올린 원본 사진을 날짜별로 나란히 보여 줍니다. 사진을 누르면 크게 볼 수 있습니다. 사용 시간을 자동으로 판정하거나 점수화하지 않습니다.</p>
+    </section>
   );
 }
 

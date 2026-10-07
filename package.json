@@ -14,6 +14,9 @@
     "verify:db": "node scripts/verify-db.mjs",
     "bootstrap:teacher": "node --env-file=.env.server scripts/bootstrap-teacher.mjs",
     "verify:public-db": "node scripts/verify-public-db.mjs",
+    "verify:images-db": "node scripts/verify-images-db.mjs",
+    "verify:images-payload": "node scripts/verify-images-payload.ts",
+    "verify:images-live": "node --env-file=.env.server scripts/verify-images-live.mjs",
     "verify:public-live": "node --env-file=.env.server scripts/verify-public-live.mjs",
     "setup:class": "node --env-file=.env.server scripts/setup-public-class.mjs",
     "deploy:pages": "node scripts/deploy-pages.mjs"

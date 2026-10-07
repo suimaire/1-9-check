@@ -138,7 +138,7 @@ export default function DayBoard() {
                     {!r.student.active && <span className="chip neutral" style={{ marginLeft: 6 }}>비활성</span>}
                     {flags.has(r.student.id) && <span className="chip flag" style={{ marginLeft: 6 }} title="면제·미대상·마감 전 날짜를 제외한 최근 두 대상일 모두 미제출">2일 연속 미제출</span>}
                   </td>
-                  <td><StateChip state={r.state} /></td>
+                  <td className="nowrap"><StateChip state={r.state} />{r.submission && <span className="xs muted"> 사진 {r.submission.images.length}장</span>}</td>
                   <td className="mono nowrap small">{r.submission ? fmtShortDateTime(Date.parse(r.submission.first_submitted_at)) : '–'}</td>
                   <td>{r.submission ? <ReviewChip status={r.submission.review_status} /> : <span className="faint">–</span>}</td>
                   <td>{r.excuse ? <span className="chip info">{r.excuse.status === 'pending' ? '도착' : r.excuse.status === 'approved' ? '승인' : '미승인'}</span> : <span className="faint">–</span>}</td>
