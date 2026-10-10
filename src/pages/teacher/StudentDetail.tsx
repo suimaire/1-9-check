@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router';
 import { useBackend } from '../../app/context.tsx';
 import { AuthImage, ErrorBanner, ReviewChip, StateChip, useAsync } from '../../components/ui.tsx';
 import { addDays, fmtDate, fmtDateTime, fmtShortDate, fmtShortDateTime, fmtTime, kstDateOf } from '../../lib/kst.ts';
-import { cellKey, STATE_LABEL, submitState, twoDayMissing } from '../../lib/status.ts';
+import { cellKey, consecutiveMissingCount, STATE_LABEL, STREAK_MIN, submitState } from '../../lib/status.ts';
 import { EXCUSE_LABEL, type Student } from '../../lib/types.ts';
 import { CellModal } from './CellModal.tsx';
 import { useTeacher } from './TeacherLayout.tsx';
@@ -17,6 +17,7 @@ export default function StudentDetail() {
 
   if (!student) return <div className="card">학생을 찾을 수 없습니다. <Link to="/teacher/roster">명단으로</Link></div>;
   const term = data.term;
+  const streak = consecutiveMissingCount(student, data.days, board, now);
 
   return (
     <div className="stack">
@@ -28,7 +29,7 @@ export default function StudentDetail() {
           </span>
         </div>
         <div className="row">
-          {term && twoDayMissing(student, data.days, board, now) && <span className="chip flag">2일 연속 미제출</span>}
+          {term && streak >= STREAK_MIN && <span className="chip flag" title="현재 시각 기준, 마감이 지난 수집 대상일을 최근부터 거슬러 센 연속 미제출 일수(면제·수집 제외·마감 전 날짜는 건너뜀)">{streak}일 연속 미제출</span>}
           <Link className="btn sm" to="/teacher">현황으로</Link>
         </div>
       </div>

@@ -148,21 +148,24 @@ export function summarize(rows: Row[], day: TermDay): DaySummary {
   return s;
 }
 
+/** 연속 미제출 표시 기준(교사 참고용): 이 일수 이상일 때만 표시 */
+export const STREAK_MIN = 2;
+
 /**
- * 최근 대상 2일 연속 미제출(교사 참고용).
- * 면제·미대상·아직 마감 전인 날은 건너뛰고, 학생별 최근 두 대상일이 모두 현재 미제출일 때만 true.
+ * 연속 미제출 일수(교사 참고용).
+ * 최신 날짜부터 거꾸로 보며 마감이 지난 수집 대상일의 미제출을 센다.
+ * 정시·지각 접수를 만나면 끊기고, 면제·미대상(수집 제외·명단 범위 밖)·예정·대기(마감 전)는 건너뛴다.
  */
-export function twoDayMissing(student: Student, days: TermDay[], board: Board, now: number): boolean {
+export function consecutiveMissingCount(student: Student, days: TermDay[], board: Board, now: number): number {
   const sorted = [...days].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
-  const picked: SubmitState[] = [];
+  let count = 0;
   for (const day of sorted) {
     const k = cellKey(student.id, day.record_date);
     const state = submitState({
       day, student, exempt: board.exemptions.has(k), submission: board.submissions.get(k) ?? null, now,
     });
-    if (state === 'not_target' || state === 'exempt' || state === 'scheduled' || state === 'waiting') continue;
-    picked.push(state);
-    if (picked.length === 2) break;
+    if (state === 'missing') count++;
+    else if (state === 'on_time' || state === 'late') break;
   }
-  return picked.length === 2 && picked.every((s) => s === 'missing');
+  return count;
 }

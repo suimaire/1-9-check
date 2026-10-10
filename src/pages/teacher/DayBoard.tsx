@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { ReviewChip, StateChip } from '../../components/ui.tsx';
 import { copyText } from '../../lib/csv.ts';
 import { fmtDate, fmtDateTime, fmtShortDateTime } from '../../lib/kst.ts';
-import { dayRows, latestFinishedTargetDay, summarize, twoDayMissing, type Row } from '../../lib/status.ts';
+import { consecutiveMissingCount, dayRows, latestFinishedTargetDay, STREAK_MIN, summarize, type Row } from '../../lib/status.ts';
 import type { Student } from '../../lib/types.ts';
 import { CellModal } from './CellModal.tsx';
 import { useTeacher } from './TeacherLayout.tsx';
@@ -33,7 +33,7 @@ export default function DayBoard() {
   const day = days.find((d) => d.record_date === params.get('date')) ?? defaultDay;
 
   const rows = useMemo(() => (day ? dayRows(day, data.students, board, now) : []), [day, data.students, board, now]);
-  const flags = useMemo(() => new Set(data.students.filter((s) => twoDayMissing(s, days, board, now)).map((s) => s.id)), [data.students, days, board, now]);
+  const streaks = useMemo(() => new Map(data.students.map((s) => [s.id, consecutiveMissingCount(s, days, board, now)])), [data.students, days, board, now]);
 
   if (!data.term) {
     return <div className="card stack"><p>아직 운영 기간이 없습니다.</p><Link className="btn primary" to="/teacher/settings">운영 기간 설정하기</Link></div>;
@@ -136,7 +136,7 @@ export default function DayBoard() {
                   <td className="nowrap">
                     {r.student.name}
                     {!r.student.active && <span className="chip neutral" style={{ marginLeft: 6 }}>비활성</span>}
-                    {flags.has(r.student.id) && <span className="chip flag" style={{ marginLeft: 6 }} title="면제·미대상·마감 전 날짜를 제외한 최근 두 대상일 모두 미제출">2일 연속 미제출</span>}
+                    {(streaks.get(r.student.id) ?? 0) >= STREAK_MIN && <span className="chip flag" style={{ marginLeft: 6 }} title="현재 시각 기준, 마감이 지난 수집 대상일을 최근부터 거슬러 센 연속 미제출 일수(면제·수집 제외·마감 전 날짜는 건너뜀)">{streaks.get(r.student.id)}일 연속 미제출</span>}
                   </td>
                   <td className="nowrap"><StateChip state={r.state} />{r.submission && <span className="xs muted"> 사진 {r.submission.images.length}장</span>}</td>
                   <td className="mono nowrap small">{r.submission ? fmtShortDateTime(Date.parse(r.submission.first_submitted_at)) : '–'}</td>
@@ -148,7 +148,7 @@ export default function DayBoard() {
             </tbody>
           </table>
         </div>
-        <p className="xs muted">'2일 연속 미제출'은 교사 참고 표시입니다. 벌점·진단과 연결되지 않습니다. 정렬은 학번순입니다.</p>
+        <p className="xs muted">'N일 연속 미제출'은 마감이 지난 수집 대상일 기준 연속 미제출 일수(2일 이상)를 보여 주는 교사 참고 표시입니다. 면제·수집 제외일은 건너뜁니다. 벌점·진단과 연결되지 않습니다. 정렬은 학번순입니다.</p>
       </section>
 
       {open && <CellModal student={open} date={day.record_date} onClose={() => setOpen(null)} />}
