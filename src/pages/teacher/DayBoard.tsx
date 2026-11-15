@@ -32,7 +32,7 @@ export default function DayBoard() {
   const defaultDay = latestFinishedTargetDay(days, now) ?? days[0] ?? null;
   const day = days.find((d) => d.record_date === params.get('date')) ?? defaultDay;
 
-  const rows = useMemo(() => (day ? dayRows(day, data.students, board, now) : []), [day, data.students, board, now]);
+  const rows = useMemo(() => (day ? dayRows(day, data.students, board, now).filter((r) => r.participating) : []), [day, data.students, board, now]);
   const streaks = useMemo(() => new Map(data.students.map((s) => [s.id, consecutiveMissingCount(s, days, board, now)])), [data.students, days, board, now]);
 
   if (!data.term) {
@@ -64,7 +64,7 @@ export default function DayBoard() {
           <div className="stack" style={{ gap: 2 }}>
             <h1>{fmtDate(day.record_date)} 기록</h1>
             <span className="small muted">
-              {day.is_target ? `제출 ${fmtDateTime(Date.parse(day.window_open_at))} ~ 마감 ${fmtDateTime(Date.parse(day.deadline_at))}` : `수집 제외일${day.note ? ` · ${day.note}` : ''}`}
+              {day.is_target ? `제출 ${fmtDateTime(Date.parse(day.window_open_at))} ~ 마감 ${fmtDateTime(Date.parse(day.deadline_at))}` : `수집 제외일${day.note ? ` ,  ${day.note}` : ''}`}
             </span>
           </div>
           <div className="row">
@@ -84,7 +84,7 @@ export default function DayBoard() {
             <div className="stats">
               <Stat label="전체 명단" value={sum.roster} />
               <Stat label="제출 대상" value={sum.target} sub={sum.exempt ? `면제 ${sum.exempt}명 제외` : undefined} />
-              <Stat label="접수" value={sum.received} sub={`정시 ${sum.onTime} · 지각 ${sum.late}`} />
+              <Stat label="접수" value={sum.received} sub={`정시 ${sum.onTime} ,  지각 ${sum.late}`} />
               {now < Date.parse(day.window_open_at)
                 ? <Stat label="예정" value={sum.scheduled} sub="제출 창이 아직 열리지 않음" />
                 : beforeDeadline
@@ -93,7 +93,7 @@ export default function DayBoard() {
               <Stat label="면제" value={sum.exempt} />
             </div>
             <div className="row small muted" style={{ gap: 12 }}>
-              <span>접수 중 · 지각 <strong>{sum.late}</strong></span>
+              <span>접수 중 ,  지각 <strong>{sum.late}</strong></span>
               <span>미확인 <strong>{sum.unchecked}</strong></span>
               <span>확인 완료 <strong>{sum.checked}</strong></span>
               <span>수정 요청 <strong>{sum.revision}</strong></span>
@@ -112,7 +112,7 @@ export default function DayBoard() {
               </button>
             ))}
           </div>
-          <input type="search" placeholder="학번·이름 검색" value={query} onChange={(e) => setQuery(e.target.value)} style={{ maxWidth: 220 }} aria-label="학번 또는 이름 검색" />
+          <input type="search" placeholder="학번, 이름 검색" value={query} onChange={(e) => setQuery(e.target.value)} style={{ maxWidth: 220 }} aria-label="학번 또는 이름 검색" />
         </div>
         {filter === 'missing' && (
           <div className="row">
@@ -136,7 +136,7 @@ export default function DayBoard() {
                   <td className="nowrap">
                     {r.student.name}
                     {!r.student.active && <span className="chip neutral" style={{ marginLeft: 6 }}>비활성</span>}
-                    {(streaks.get(r.student.id) ?? 0) >= STREAK_MIN && <span className="chip flag" style={{ marginLeft: 6 }} title="현재 시각 기준, 마감이 지난 수집 대상일을 최근부터 거슬러 센 연속 미제출 일수(면제·수집 제외·마감 전 날짜는 건너뜀)">{streaks.get(r.student.id)}일 연속 미제출</span>}
+                    {(streaks.get(r.student.id) ?? 0) >= STREAK_MIN && <span className="chip flag" style={{ marginLeft: 6 }} title="현재 시각 기준, 마감이 지난 수집 대상일을 최근부터 거슬러 센 연속 미제출 일수(면제, 수집 제외, 마감 전 날짜는 건너뜀)">{streaks.get(r.student.id)}일 연속 미제출</span>}
                   </td>
                   <td className="nowrap"><StateChip state={r.state} />{r.submission && <span className="xs muted"> 사진 {r.submission.images.length}장</span>}</td>
                   <td className="mono nowrap small">{r.submission ? fmtShortDateTime(Date.parse(r.submission.first_submitted_at)) : '–'}</td>
@@ -148,7 +148,7 @@ export default function DayBoard() {
             </tbody>
           </table>
         </div>
-        <p className="xs muted">'N일 연속 미제출'은 마감이 지난 수집 대상일 기준 연속 미제출 일수(2일 이상)를 보여 주는 교사 참고 표시입니다. 면제·수집 제외일은 건너뜁니다. 벌점·진단과 연결되지 않습니다. 정렬은 학번순입니다.</p>
+        <p className="xs muted">'N일 연속 미제출'은 마감이 지난 수집 대상일 기준 연속 미제출 일수(2일 이상)를 보여 주는 교사 참고 표시입니다. 면제, 수집 제외일은 건너뜁니다. 벌점, 진단과 연결되지 않습니다. 정렬은 학번순입니다.</p>
       </section>
 
       {open && <CellModal student={open} date={day.record_date} onClose={() => setOpen(null)} />}

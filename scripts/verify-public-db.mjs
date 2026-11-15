@@ -1,6 +1,6 @@
 // 학번 제출(20261005130000) 전용 확인 — PGlite에 두 migration을 차례로 적용하고
 // anon / 예전 학생 세션 / 교사 / service_role(공개 Edge Function이 쓰는 역할)로 검사한다.
-// Storage API·Edge Function 자체는 실행하지 않는다(실연결은 verify-public-live.mjs).
+// Storage API, Edge Function 자체는 실행하지 않는다(실연결은 verify-public-live.mjs).
 import { readFileSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
@@ -130,7 +130,7 @@ const before = await counts();
 const replay = await submit('10901', D, req1);
 const row1b = await subRow();
 const after = await counts();
-check('같은 요청 재시도 → replayed, 행·이벤트 중복 없음', replay.replayed === true && replay.version === 1 && before.s === after.s && before.e === after.e);
+check('같은 요청 재시도 → replayed, 행, 이벤트 중복 없음', replay.replayed === true && replay.version === 1 && before.s === after.s && before.e === after.e);
 check('재시도에도 최초 접수 시각 유지', new Date(row1b.first_submitted_at).getTime() === new Date(row1.first_submitted_at).getTime());
 check('응답 유실 대비: token 발급 요청의 재시도는 token 재발급', replay.token_issued === true && row1b.replacement_token_hash !== row1.replacement_token_hash);
 

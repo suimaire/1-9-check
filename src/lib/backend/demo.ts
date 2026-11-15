@@ -1,6 +1,7 @@
-// 데모 백엔드: 브라우저 메모리에서만 동작(네트워크·운영 저장소와 완전히 분리).
-// 서버와 같은 규칙(제출 창·버전 비교·재시도 멱등성·교사 버전 확인)을 흉내 낸다.
+// 데모 백엔드: 브라우저 메모리에서만 동작(네트워크, 운영 저장소와 완전히 분리).
+// 서버와 같은 규칙(제출 창, 버전 비교, 재시도 멱등성, 교사 버전 확인)을 흉내 낸다.
 import { canSubmitDay } from '../status.ts';
+import { weekendDays, WEEKEND_FINAL_CLOSE } from '../weekend.ts';
 import { MAX_IMAGES, type Me, type Submission } from '../types.ts';
 import { pickTerm, uuid } from './common.ts';
 import {
@@ -25,6 +26,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
   const controlListeners = new Set<() => void>();
   let clockId = DEMO_CLOCKS[0].id;
   let failure: DemoFailure = 'none';
+  const participants = new Map<string, string[]>();
 
   const now = () => DEMO_CLOCKS.find((c) => c.id === clockId)!.ms;
   const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
@@ -35,12 +37,17 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
     if (!me || me.role !== 'teacher') throw new BackendError('not_allowed');
   }
   function term() {
-    return pickTerm(store.terms, now());
+    return store.terms.find(t => t.id === store.klass.public_term_id) ?? pickTerm(store.terms.filter(t => t.submission_mode !== 'weekend'), now());
+  }
+  function assertParticipant(studentId: string, termId: string) {
+    if (store.terms.find(t => t.id === termId)?.submission_mode === 'weekend'
+      && !(participants.get(termId) ?? []).includes(studentId)) throw new BackendError('not_participant');
   }
   function assertSubmittable(studentId: string, termId: string, date: string) {
     const s = store.students.find((x) => x.id === studentId)!;
     const t = store.terms.find((x) => x.id === termId);
     if (!t) throw new BackendError('not_allowed');
+    assertParticipant(studentId, termId);
     const day = store.days.find((d) => d.term_id === termId && d.record_date === date);
     if (!day) throw new BackendError('date_out_of_range');
     if (!day.is_target) throw new BackendError('not_target_day');
@@ -118,7 +125,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
         ready: true,
         app_title: store.klass.app_title,
         app_subtitle: store.klass.app_subtitle,
-        term: t ? { name: t.name, instructions: t.instructions, final_close_at: t.final_close_at } : null,
+        term: t ? { id: t.id, submission_mode: t.submission_mode ?? 'daily', name: t.name, instructions: t.instructions, final_close_at: t.final_close_at } : null,
         open_days: open.map(pick),
         next_day: next ? pick(next) : null,
       };
@@ -135,7 +142,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       }
       const newToken = () => uuid().replace(/-/g, '') + uuid().replace(/-/g, '');
       const result = (sub: Submission, replayed: boolean, replaced: boolean, token?: string): PublicSubmitResult => {
-        const day = store.days.find((d) => d.record_date === sub.record_date)!;
+        const day = store.days.find((d) => d.term_id === sub.term_id && d.record_date === sub.record_date)!;
         return {
           replayed, replaced, record_date: sub.record_date, version: sub.image_version, image_count: sub.images.length,
           first_submitted_at: sub.first_submitted_at, deadline_at: day.deadline_at,
@@ -146,6 +153,9 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       const replay = store.events.get(input.requestId);
       if (replay) {
         const sub = store.submissions.find((x) => x.id === replay.submissionId)!;
+        if (sub.student_id !== s.id || sub.record_date !== input.recordDate) throw new BackendError('bad_request');
+        if (input.termId && sub.term_id !== input.termId) throw new BackendError('term_changed');
+        assertParticipant(s.id, sub.term_id);
         // 응답을 못 받은 token 발급 요청의 재시도: token을 새로 발급한다(서버와 같은 규칙)
         const fresh = replay.issuedToken ? newToken() : undefined;
         if (fresh) store.tokens.set(sub.id, fresh);
@@ -153,6 +163,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       }
       const t = term();
       if (!t) throw new BackendError('date_out_of_range');
+      if (input.termId && t.id !== input.termId) throw new BackendError('term_changed');
       assertSubmittable(s.id, t.id, input.recordDate);
       if (input.selfMinutes !== null && (input.selfMinutes < 0 || input.selfMinutes > 1440)) throw new BackendError('bad_minutes');
       if ((input.note ?? '').length > 100) throw new BackendError('note_too_long');
@@ -198,6 +209,11 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       return result(sub, false, sub.image_version > 1, token);
     },
 
+    async publicRecover(input) {
+      if (!store.events.has(input.requestId)) return null;
+      return this.publicSubmit({ ...input, images: [], token: null, selfMinutes: null, note: null });
+    },
+
     async loadTeacherData(termId) {
       await delay();
       requireTeacher();
@@ -208,6 +224,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
         term: t,
         days: store.days.filter((d) => d.term_id === t?.id),
         students: [...store.students].sort((a, b) => a.student_no.localeCompare(b.student_no)),
+        participantIds: participants.get(t?.id ?? '') ?? [],
         submissions: store.submissions.filter((x) => x.term_id === t?.id),
         excuses: store.excuses.filter((x) => x.term_id === t?.id),
         exemptions: store.exemptions.filter((x) => x.term_id === t?.id),
@@ -310,24 +327,64 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       requireTeacher();
       const t = store.terms.find((x) => x.id === input.termId);
       if (!t) throw new BackendError('demo_term_fixed');
-      // 데모에서는 이름·마감·안내문 변경만 반영(날짜 범위 고정). 열린 날짜의 마감은 유지.
+      if (t.submission_mode === 'weekend') throw new BackendError('wrong_submission_mode');
+      // 데모에서는 이름, 마감, 안내문 변경만 반영(날짜 범위 고정). 열린 날짜의 마감은 유지.
       t.name = input.name;
       t.instructions = input.instructions;
       t.retention_until = input.retentionUntil;
       if (input.finalCloseAt) t.final_close_at = input.finalCloseAt;
       t.deadline_minutes = input.deadlineMinutes;
       for (const d of store.days) {
-        if (Date.parse(d.window_open_at) > now()) {
+        if (d.term_id === t.id && Date.parse(d.window_open_at) > now()) {
           d.deadline_at = new Date(Date.parse(d.window_open_at) + input.deadlineMinutes * 60000).toISOString();
         }
       }
       return t.id;
     },
 
+    async saveWeekendTerm(classId, input) {
+      requireTeacher();
+      if (classId !== store.klass.id) throw new BackendError('not_allowed');
+      if (!Number.isInteger(input.deadlineMinutes) || input.deadlineMinutes < 1 || input.deadlineMinutes > 1439) throw new BackendError('bad_deadline');
+      if (!input.name.trim() || input.name.trim().length > 40) throw new BackendError('bad_request');
+      let t = store.terms.find(x => x.id === input.termId);
+      if (input.termId && (!t || t.submission_mode !== 'weekend')) throw new BackendError('not_allowed');
+      if (!t) {
+        t = { id: uuid(), class_id: classId, name: input.name.trim(), submission_mode: 'weekend',
+          start_date: '2026-11-21', last_record_date: '2026-12-06', deadline_minutes: input.deadlineMinutes,
+          final_close_at: WEEKEND_FINAL_CLOSE, retention_until: '2027-01-06', instructions: input.instructions };
+        store.terms.push(t);
+        store.days.push(...weekendDays(t.id, input.deadlineMinutes));
+      } else {
+        t.name = input.name.trim();
+        t.instructions = input.instructions;
+        t.deadline_minutes = input.deadlineMinutes;
+        const id = t.id;
+        for (const d of store.days.filter(d => d.term_id === id && Date.parse(d.window_open_at) > now())) {
+          d.deadline_at = new Date(Date.parse(d.window_open_at) + input.deadlineMinutes * 60000).toISOString();
+        }
+      }
+      return t.id;
+    },
+
+    async setPublicTerm(classId, termId) {
+      requireTeacher();
+      if (classId !== store.klass.id || (termId && !store.terms.some(t => t.id === termId && t.class_id === classId))) throw new BackendError('not_allowed');
+      store.klass.public_term_id = termId;
+    },
+
+    async setTermParticipants(termId, studentIds) {
+      requireTeacher();
+      if (!store.terms.some(t => t.id === termId && t.submission_mode === 'weekend')
+        || studentIds.some(id => !store.students.some(s => s.id === id))) throw new BackendError('not_allowed');
+      participants.set(termId, [...new Set(studentIds)]);
+    },
+
     async setDayTarget(termId, date, isTarget, note) {
       requireTeacher();
       const d = store.days.find((x) => x.term_id === termId && x.record_date === date);
       if (!d) throw new BackendError('date_out_of_range');
+      if (store.terms.find(t => t.id === termId)?.submission_mode === 'weekend' && d.is_target !== isTarget) throw new BackendError('weekend_dates_fixed');
       d.is_target = isTarget;
       d.note = note.trim() || null;
     },

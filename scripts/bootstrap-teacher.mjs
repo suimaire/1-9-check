@@ -1,5 +1,5 @@
 // 최초 교사 계정 + 학급 생성(운영자가 로컬에서 한 번 실행).
-// 서버 비밀 키는 이 터미널에서만 사용하고 저장소·프런트엔드에 두지 않는다.
+// 서버 비밀 키는 이 터미널에서만 사용하고 저장소, 프런트엔드에 두지 않는다.
 //
 // 사용(PowerShell):
 //   node --env-file=.env.server scripts/bootstrap-teacher.mjs --login-id t10900 --name "담임" --class "1학년 9반"
@@ -28,7 +28,7 @@ if (!url || !secret || !domain) {
   process.exit(1);
 }
 if (!loginId || !/^[0-9a-z-]{1,32}$/.test(loginId) || !values.name || !values.class) {
-  console.error('사용법: --login-id <영문소문자·숫자·-> --name <표시 이름> --class <학급 이름>');
+  console.error('사용법: --login-id <영문소문자, 숫자, -> --name <표시 이름> --class <학급 이름>');
   process.exit(1);
 }
 

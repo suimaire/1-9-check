@@ -12,8 +12,8 @@ export interface Receipt {
   version: number;
 }
 
-const tokenKey = (no: string, date: string) => `${PREFIX}:replacement-token:${no}:${date}`;
-const receiptKey = (no: string, date: string) => `${PREFIX}:receipt:${no}:${date}`;
+const tokenKey = (no: string, date: string, term?: string) => `${PREFIX}:replacement-token:${term ? `${term}:` : ''}${no}:${date}`;
+const receiptKey = (no: string, date: string, term?: string) => `${PREFIX}:receipt:${term ? `${term}:` : ''}${no}:${date}`;
 const LAST_NO = `${PREFIX}:last-student-no`;
 
 function read(key: string): string | null {
@@ -32,16 +32,16 @@ function write(key: string, value: string) {
   }
 }
 
-export function getToken(no: string, date: string): string | null {
-  return read(tokenKey(no, date));
+export function getToken(no: string, date: string, term?: string): string | null {
+  return read(tokenKey(no, date, term));
 }
 
-export function saveToken(no: string, date: string, token: string) {
-  write(tokenKey(no, date), token);
+export function saveToken(no: string, date: string, token: string, term?: string) {
+  write(tokenKey(no, date, term), token);
 }
 
-export function getReceipt(no: string, date: string): Receipt | null {
-  const raw = read(receiptKey(no, date));
+export function getReceipt(no: string, date: string, term?: string): Receipt | null {
+  const raw = read(receiptKey(no, date, term));
   if (!raw) return null;
   try {
     return JSON.parse(raw) as Receipt;
@@ -50,8 +50,8 @@ export function getReceipt(no: string, date: string): Receipt | null {
   }
 }
 
-export function saveReceipt(no: string, date: string, r: Receipt) {
-  write(receiptKey(no, date), JSON.stringify(r));
+export function saveReceipt(no: string, date: string, r: Receipt, term?: string) {
+  write(receiptKey(no, date, term), JSON.stringify(r));
 }
 
 export function getLastStudentNo(): string {

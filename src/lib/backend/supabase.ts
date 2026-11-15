@@ -143,7 +143,7 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
       return data;
     },
 
-    // 공개 학번 제출: 학생 브라우저는 DB·Storage에 직접 접근하지 않고 submit 함수만 호출한다.
+    // 공개 학번 제출: 학생 브라우저는 DB, Storage에 직접 접근하지 않고 submit 함수만 호출한다.
     async publicInfo(): Promise<PublicInfo> {
       return invoke<PublicInfo>('submit', { action: 'info' });
     },
@@ -153,6 +153,7 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
       form.append('student_no', input.studentNo);
       form.append('record_date', input.recordDate);
       form.append('request_id', input.requestId);
+      if (input.termId) form.append('term_id', input.termId);
       if (input.token) form.append('replacement_token', input.token);
       if (input.selfMinutes !== null) form.append('self_minutes', String(input.selfMinutes));
       if (input.note) form.append('note', input.note);
@@ -163,6 +164,11 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
       return invoke<PublicSubmitResult>('submit', form);
     },
 
+    async publicRecover(input) {
+      return invoke<PublicSubmitResult | null>('submit', { action: 'recover', term_id: input.termId,
+        student_no: input.studentNo, record_date: input.recordDate, request_id: input.requestId });
+    },
+
     async loadTeacherData(termId): Promise<TeacherData | null> {
       const id = await uid();
       const now = await serverNow();
@@ -170,15 +176,15 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
       if (error) throw toBackendError(error);
       const classId = links?.[0]?.class_id as string | undefined;
       if (!classId) return null;
-      const { data: klass, error: e2 } = await sb.from('classes').select('id, name, app_title, app_subtitle').eq('id', classId).single<ClassInfo>();
+      const { data: klass, error: e2 } = await sb.from('classes').select('id, name, app_title, app_subtitle, public_term_id').eq('id', classId).single<ClassInfo>();
       if (e2) throw toBackendError(e2);
       const { data: termRows, error: e3 } = await sb.from('terms').select('*').eq('class_id', classId);
       if (e3) throw toBackendError(e3);
       const terms = (termRows ?? []) as Term[];
-      const term = (termId && terms.find((t) => t.id === termId)) || pickTerm(terms, now);
+      const term = (termId && terms.find((t) => t.id === termId)) || terms.find(t => t.id === klass.public_term_id) || pickTerm(terms, now);
       const students = await fetchAll<Student>((a, b) => sb.from('students').select('id, class_id, student_no, name, active, roster_from, roster_until').eq('class_id', classId).order('student_no').range(a, b));
-      if (!term) return { klass, terms, term: null, days: [], students, submissions: [], excuses: [], exemptions: [] };
-      // 사진은 경로·크기 같은 목록만 받는다. 이미지 파일은 화면에 보일 때만 하나씩 내려받는다.
+      if (!term) return { klass, terms, term: null, days: [], students, participantIds: [], submissions: [], excuses: [], exemptions: [] };
+      // 사진은 경로, 크기 같은 목록만 받는다. 이미지 파일은 화면에 보일 때만 하나씩 내려받는다.
       const [days, subRows, imageRows, excuses, exemptions] = await Promise.all([
         fetchAll<TermDay>((a, b) => sb.from('term_days').select('*').eq('term_id', term.id).order('record_date').range(a, b)),
         fetchAll<Omit<Submission, 'images'>>((a, b) => sb.from('submissions').select(SUBMISSION_COLS).eq('term_id', term.id).order('id').range(a, b)),
@@ -189,7 +195,10 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
         fetchAll<Exemption>((a, b) => sb.from('exemptions').select('term_id, student_id, record_date, reason').eq('term_id', term.id).order('record_date').range(a, b)),
       ]);
       const submissions = attachImages(subRows, imageRows);
-      return { klass, terms, term, days, students, submissions, excuses, exemptions };
+      const participants = term.submission_mode === 'weekend'
+        ? await fetchAll<{ student_id: string }>((a, b) => sb.from('term_participants').select('student_id')
+          .eq('term_id', term.id).eq('active', true).order('student_id').range(a, b)) : [];
+      return { klass, terms, term, days, students, participantIds: participants.map(p => p.student_id), submissions, excuses, exemptions };
     },
 
     async reviewSubmission(submissionId, version, status, message) {
@@ -267,6 +276,19 @@ export function createSupabaseBackend(url: string, publishableKey: string): Back
 
     async setDayTarget(termId, date, isTarget, note) {
       await rpc('set_day_target', { p_term_id: termId, p_record_date: date, p_is_target: isTarget, p_note: note });
+    },
+
+    async saveWeekendTerm(classId, input) {
+      return rpc<string>('save_weekend_term', { p_class_id: classId, p_term_id: input.termId,
+        p_name: input.name, p_deadline_minutes: input.deadlineMinutes, p_instructions: input.instructions });
+    },
+
+    async setPublicTerm(classId, termId) {
+      await rpc('set_public_term', { p_class_id: classId, p_term_id: termId });
+    },
+
+    async setTermParticipants(termId, studentIds) {
+      await rpc('set_term_participants', { p_term_id: termId, p_student_ids: studentIds });
     },
 
     async cleanupImages(termId) {

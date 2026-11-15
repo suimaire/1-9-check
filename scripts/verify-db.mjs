@@ -1,6 +1,6 @@
 // 최소 접근권한 확인(1~5) — 실제 Postgres 엔진(PGlite)에 마이그레이션을 적용하고
-// anon / authenticated(학생·교사) / service_role 역할을 실제로 바꿔 가며 검사한다.
-// 주의: Supabase의 auth·storage 스키마는 최소 대역(stub)이다. Storage API·Auth 서버·Edge Function은
+// anon / authenticated(학생, 교사) / service_role 역할을 실제로 바꿔 가며 검사한다.
+// 주의: Supabase의 auth, storage 스키마는 최소 대역(stub)이다. Storage API, Auth 서버, Edge Function은
 // 여기서 실행되지 않으므로 실제 프로젝트에서 다시 확인해야 한다(README 참고).
 import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
@@ -143,7 +143,7 @@ async function confirmAs(role, uid = null) {
 }
 
 // ---------------------------------------------------------------------------
-group = '2) 학생 A ↛ 학생 B 기록·이미지';
+group = '2) 학생 A ↛ 학생 B 기록, 이미지';
 const aSubs = await as('authenticated', U.A, `select student_id from public.submissions`);
 check('A의 제출 조회는 본인 것만', !aSubs.error && aSubs.rows.length === 1 && aSubs.rows[0].student_id === SA);
 check('B 제출을 student_id로 직접 조회해도 0행', empty(await as('authenticated', U.A, `select * from public.submissions where student_id = $1`, [SB])));
@@ -165,7 +165,7 @@ check('학생이 confirm_submission 직접 호출 거절(B ID 위조 포함)', d
 check('다른 반 학생 X는 1반 운영 기간 조회 0행', empty(await as('authenticated', U.X, `select id from public.terms where id = $1`, [TERM])));
 
 // ---------------------------------------------------------------------------
-group = '3) 학생 ↛ 교사 메모·교사 기능';
+group = '3) 학생 ↛ 교사 메모, 교사 기능';
 check('교사 메모 조회 0행', empty(await as('authenticated', U.B, `select * from public.teacher_notes`)));
 check('교사 메모 작성 거절', denied(await as('authenticated', U.B, `insert into public.teacher_notes (term_id, student_id, body) values ($1, $2, '위조')`, [TERM, SB])));
 const subB = (await db.query(`select id, image_version from public.submissions where student_id = $1`, [SB])).rows[0];
@@ -181,18 +181,18 @@ check('앱 이름 수정 불가(0행)', !r.error && r.affected === 0);
 check('로그인 별칭 매핑 조회 거절', denied(await as('authenticated', U.B, `select * from public.login_aliases`)));
 check('다른 학생 프로필(역할) 조회 0행', empty(await as('authenticated', U.B, `select * from public.profiles where user_id <> $1`, [U.B])));
 check('프로필 역할 자기 수정 거절', denied(await as('authenticated', U.B, `update public.profiles set role = 'teacher' where user_id = $1`, [U.B])));
-check('비밀번호 미변경 학생 M: 제출·운영기간 조회 0행', empty(await as('authenticated', U.M, `select * from public.terms`)));
+check('비밀번호 미변경 학생 M: 제출, 운영기간 조회 0행', empty(await as('authenticated', U.M, `select * from public.terms`)));
 check('비밀번호 미변경 학생 M: 업로드 거절', denied(await as('authenticated', U.M,
   `insert into storage.objects (bucket_id, name, owner_id) values ('screenshots', $1, $2)`, [objPath(U.M, TERM), U.M])));
 check('다른 반 교사2: 1반 제출 조회 0행', empty(await as('authenticated', U.T2, `select * from public.submissions where term_id = $1`, [TERM])));
 check('다른 반 교사2: 1반 이미지 조회 0행', empty(await as('authenticated', U.T2, `select name from storage.objects where name = $1`, [pB])));
 check('다른 반 교사2: 1반 확인 처리 거절', /not_allowed/.test((await as('authenticated', U.T2, `select public.review_submission($1, $2, 'checked', '')`, [subB.id, subB.image_version])).error ?? ''));
-check('담당 교사1: 학생 B 이미지·메모 조회 가능',
+check('담당 교사1: 학생 B 이미지, 메모 조회 가능',
   (await as('authenticated', U.T1, `select name from storage.objects where name = $1`, [pB])).rows?.length === 1
   && (await as('authenticated', U.T1, `select id from public.teacher_notes`)).rows?.length === 1);
 
 // ---------------------------------------------------------------------------
-group = '4) 교체·실패·재시도 무결성';
+group = '4) 교체, 실패, 재시도 무결성';
 const D4 = d(-5);
 const p1 = objPath(U.A, TERM); await putObject(p1, U.A);
 const req1 = uuid();
@@ -230,7 +230,7 @@ const orphan = (await as('service_role', null, `select public.term_object_names(
 check('정리 대상 목록 함수(서버 키 전용) 동작', orphan >= 5);
 
 // ---------------------------------------------------------------------------
-group = '5) KST 마감 판정·면제·늦은 제출';
+group = '5) KST 마감 판정, 면제, 늦은 제출';
 async function boundary(date, offsetSql) {
   const path = objPath(U.B, TERM);
   await putObject(path, U.B);

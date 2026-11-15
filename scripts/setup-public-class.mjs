@@ -1,7 +1,7 @@
 // 공개 학번 제출 학급 준비(운영자 PC 전용, 서버 키 사용 — 커밋 금지 파일 .env.server).
 //  1) 학급 하나를 공개 제출 대상(public_submit)으로 지정하고 앱 이름을 '1-9 체크'로 맞춘다.
 //  2) 학번 10901~10934를 명단에 등록한다(표시명 '학생 01'~'학생 34'). 이미 있는 학번의 표시명은 바꾸지 않는다.
-//  3) --deactivate-others: 범위 밖 학번(예: 예전 TEST 학생)을 비활성화하고 대상 기간에서 뺀다(기록·계정은 지우지 않음).
+//  3) --deactivate-others: 범위 밖 학번(예: 예전 TEST 학생)을 비활성화하고 대상 기간에서 뺀다(기록, 계정은 지우지 않음).
 // 사용: node --env-file=.env.server scripts/setup-public-class.mjs [--class-name "1학년 9반"] [--deactivate-others]
 import { parseArgs } from 'node:util';
 import { createClient } from '@supabase/supabase-js';

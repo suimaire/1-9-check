@@ -1,5 +1,5 @@
-// 사진 세트 payload 확인: submit 함수의 파일 검증(1~3장, 사진마다 크기·확장자·MIME·서명)과
-// 교사 화면의 예전 단일 사진 기록 호환(attachImages). 네트워크·DB 없음.
+// 사진 세트 payload 확인: submit 함수의 파일 검증(1~3장, 사진마다 크기, 확장자, MIME, 서명)과
+// 교사 화면의 예전 단일 사진 기록 호환(attachImages). 네트워크, DB 없음.
 // 실행: node scripts/verify-images-payload.ts
 import { checkFiles, MAX_BYTES } from '../supabase/functions/submit/files.ts';
 import { attachImages } from '../src/lib/backend/common.ts';
@@ -21,7 +21,7 @@ const code = async (files: unknown[]) => {
 
 check('0장 → no_image', (await code([])) === 'no_image');
 check('1장 PNG 통과', (await code([png()])) === 'ok:image/png');
-check('3장(PNG·JPEG·WebP) 통과, 순서 유지', (await code([png(), jpg(), webp()])) === 'ok:image/png,image/jpeg,image/webp');
+check('3장(PNG, JPEG, WebP) 통과, 순서 유지', (await code([png(), jpg(), webp()])) === 'ok:image/png,image/jpeg,image/webp');
 check('4장 → too_many_images', (await code([png(), png(), png(), png()])) === 'too_many_images');
 check('문자열 값(파일 아님) → bad_request', (await code([png(), 'x'])) === 'bad_request');
 check('빈 파일 → bad_request', (await code([new File([], 'e.png', { type: 'image/png' })])) === 'bad_request');
@@ -31,7 +31,7 @@ check('2장째가 2MB 초과 → too_large(전체 거절)', (await code([png(), 
 const exact = new Uint8Array(MAX_BYTES);
 exact.set(PNG);
 check('정확히 2MB는 통과(사진마다 한도)', (await code([new File([exact], 'x.png', { type: 'image/png' }), png(), png()])) === 'ok:image/png,image/png,image/png');
-check('확장자·MIME 불일치 → bad_type', (await code([new File([PNG], 'a.jpg', { type: 'image/png' })])) === 'bad_type');
+check('확장자, MIME 불일치 → bad_type', (await code([new File([PNG], 'a.jpg', { type: 'image/png' })])) === 'bad_type');
 check('허용 외 MIME(GIF) → bad_type', (await code([new File([PNG], 'a.gif', { type: 'image/gif' })])) === 'bad_type');
 check('서명 위조(JPEG라 하고 PNG 내용) → bad_type', (await code([png(), new File([PNG], 'x.jpg', { type: 'image/jpeg' })])) === 'bad_type');
 check('서명 없음(텍스트) → bad_type', (await code([new File([new TextEncoder().encode('hello world!')], 'x.png', { type: 'image/png' })])) === 'bad_type');
@@ -62,5 +62,5 @@ for (const r of results) {
   console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${!r.ok && r.detail ? `  (${r.detail})` : ''}`);
   if (!r.ok) failed++;
 }
-console.log(`\n${results.length - failed}/${results.length} 통과 (사진 세트 payload·호환)`);
+console.log(`\n${results.length - failed}/${results.length} 통과 (사진 세트 payload, 호환)`);
 process.exit(failed ? 1 : 0);

@@ -1,14 +1,14 @@
 // 공개 학번 제출(학생 로그인 없음). verify_jwt=false로 배포하며, 그 자체는 보안 장치가 아니다.
-// 모든 검증은 여기와 DB 함수 public_submit_images()에서 한다. 학생 브라우저는 DB·Storage에 직접 쓰지 않는다.
+// 모든 검증은 여기와 DB 함수 public_submit_images()에서 한다. 학생 브라우저는 DB, Storage에 직접 쓰지 않는다.
 //
-// POST application/json {action:'info'}  → 제출 일정(학생 이름·제출 현황 없음)
+// POST application/json {action:'info'}  → 제출 일정(학생 이름, 제출 현황 없음)
 // POST multipart/form-data               → 제출
 //   student_no, record_date, request_id(재시도에도 같은 값), replacement_token(선택), self_minutes(선택), note(선택),
-//   files(1~3개, 같은 key 반복 · 순서 = 사진 순서). 예전 화면이 보내는 단일 file도 1장으로 받는다.
+//   files(1~3개, 같은 key 반복 ,  순서 = 사진 순서). 예전 화면이 보내는 단일 file도 1장으로 받는다.
 //
-// 하루 기록 1개 = 사진 세트 1개. request_id·replacement token·버전은 사진 세트 전체에 적용된다.
-// 순서: 입력·파일 전부 검증 → DB 사전 확인(재시도면 바로 결과) → Storage 업로드(서버 키, 전부)
-//       → DB 한 번에 반영. 업로드·반영 중 하나라도 실패하면 이번에 올린 객체를 모두 지운다(부분 제출 없음).
+// 하루 기록 1개 = 사진 세트 1개. request_id, replacement token, 버전은 사진 세트 전체에 적용된다.
+// 순서: 입력, 파일 전부 검증 → DB 사전 확인(재시도면 바로 결과) → Storage 업로드(서버 키, 전부)
+//       → 날짜별 DB 반영. 확정 여부가 불명확하면 사진을 보존하고 같은 요청으로 복구한다.
 // replacement token 원문은 응답으로만 돌려주고, DB에는 SHA-256 hash만 넘긴다.
 import {
   adminClient,
@@ -22,6 +22,7 @@ import {
   randomHex,
 } from '../_shared/util.ts';
 import { checkFiles, EXT, MAX_BYTES, MAX_FILES } from './files.ts';
+import { finalizeImageUpload } from './cleanup.ts';
 
 const MAX_BODY = MAX_FILES * MAX_BYTES + 64 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -43,7 +44,7 @@ async function sha256Hex(text: string): Promise<string> {
 
 const STATUS: Record<string, number> = {
   invalid_student_no: 400, bad_request: 400, bad_type: 400, too_large: 413, no_image: 400, too_many_images: 400, bad_minutes: 400, note_too_long: 400,
-  date_out_of_range: 409, not_target_day: 409, not_on_roster: 409, window_not_open: 409, window_closed: 409,
+  date_out_of_range: 409, not_target_day: 409, not_on_roster: 409, not_participant: 409, window_not_open: 409, window_closed: 409,
   already_submitted: 409, not_allowed: 409, too_many_attempts: 429,
 };
 
@@ -56,10 +57,27 @@ Deno.serve(async (req) => {
 
   if (type.startsWith('application/json')) {
     const b = await readJson(req);
-    if (b?.action !== 'info') return fail(req, 'bad_request');
-    const { data, error } = await admin.rpc('public_info');
-    if (error) return fail(req, 'server_error', 500);
-    return json(req, data);
+    if (b?.action === 'info') {
+      const { data, error } = await admin.rpc('public_info');
+      if (error) return fail(req, 'server_error', 500);
+      return json(req, data);
+    }
+    if (b?.action !== 'recover' || typeof b.student_no !== 'string' || !STUDENT_NOS.has(b.student_no)
+      || typeof b.record_date !== 'string' || !validDate(b.record_date)
+      || typeof b.request_id !== 'string' || !UUID.test(b.request_id)
+      || typeof b.term_id !== 'string' || !UUID.test(b.term_id)) return fail(req, 'bad_request');
+    const limit = await admin.rpc('login_rate_check', { p_key: `submit-ip:${clientIp(req)}`, p_max: 120, p_window_seconds: 900 });
+    if (limit.error) return fail(req, 'server_error', 500);
+    if (limit.data === false) return fail(req, 'too_many_attempts', 429);
+    const token = randomHex(32);
+    const { data, error } = await admin.rpc('public_recover_submission', {
+      p_expected_term_id: b.term_id, p_student_no: b.student_no, p_record_date: b.record_date,
+      p_request_id: b.request_id, p_new_token_hash: await sha256Hex(token),
+    });
+    if (error) { const code = dbErrorCode(error); return fail(req, code, code === 'server_error' ? 500 : 409); }
+    if (!data) return json(req, null);
+    const { token_issued, ...rest } = data;
+    return json(req, token_issued ? { ...rest, replacement_token: token } : rest);
   }
 
   if (!type.startsWith('multipart/form-data')) return fail(req, 'bad_request');
@@ -84,6 +102,7 @@ Deno.serve(async (req) => {
   const studentNo = str('student_no');
   const recordDate = str('record_date');
   const requestId = str('request_id').toLowerCase();
+  const expectedTermId = str('term_id').toLowerCase();
   const token = str('replacement_token').toLowerCase();
   const minutesRaw = str('self_minutes');
   const note = str('note');
@@ -92,12 +111,13 @@ Deno.serve(async (req) => {
 
   if (!STUDENT_NOS.has(studentNo)) return fail(req, 'invalid_student_no');
   if (!validDate(recordDate) || !UUID.test(requestId)) return fail(req, 'bad_request');
+  if (expectedTermId && !UUID.test(expectedTermId)) return fail(req, 'bad_request');
   if (token && !TOKEN.test(token)) return fail(req, 'bad_request');
   const minutes = minutesRaw === '' ? null : Number(minutesRaw);
   if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440)) return fail(req, 'bad_minutes');
   if (note.length > 100) return fail(req, 'note_too_long');
 
-  // 사진마다 크기·확장자·MIME·파일 서명을 모두 확인한 뒤에만 업로드한다(하나라도 틀리면 전체 거절)
+  // 사진마다 크기, 확장자, MIME, 파일 서명을 모두 확인한 뒤에만 업로드한다(하나라도 틀리면 전체 거절)
   const checked = await checkFiles(files);
   if (!checked.ok) return fail(req, checked.code, checked.status);
   const images = checked.images;
@@ -106,6 +126,7 @@ Deno.serve(async (req) => {
   const newToken = randomHex(32);
   const newTokenHash = await sha256Hex(newToken);
   const base = {
+    ...(expectedTermId ? { p_expected_term_id: expectedTermId } : {}),
     p_student_no: studentNo, p_record_date: recordDate, p_request_id: requestId,
     p_token_hash: tokenHash, p_new_token_hash: newTokenHash,
     p_self_minutes: minutes, p_note: note || null,
@@ -119,8 +140,9 @@ Deno.serve(async (req) => {
     return fail(req, code, STATUS[code] ?? (code === 'server_error' ? 500 : 409));
   };
 
-  // 1) 사전 확인: 학번·날짜·제출 창·기존 제출/token. 같은 요청의 재시도면 업로드 없이 결과만.
-  const pre = await admin.rpc('public_submit_images', { ...base, p_images: null });
+  // 1) 사전 확인: 학번, 날짜, 제출 창, 기존 제출/token. 같은 요청의 재시도면 업로드 없이 결과만.
+  const rpcName = expectedTermId ? 'public_submit_images_for_term' : 'public_submit_images';
+  const pre = await admin.rpc(rpcName, { ...base, p_images: null });
   if (pre.error) return dbFail(pre.error);
   if (pre.data?.replayed) return respond(pre.data);
   const { student_id: studentId, term_id: termId } = pre.data as { student_id: string; term_id: string };
@@ -138,13 +160,11 @@ Deno.serve(async (req) => {
     return fail(req, 'upload_failed', 500);
   }
 
-  // 3) 사진 세트 전체를 한 트랜잭션으로 반영. 실패하거나 다른 요청이 먼저 반영돼 재시도 결과가 오면
-  //    이번 업로드는 모두 지운다(기존 제출은 그대로 남는다).
-  const done = await admin.rpc('public_submit_images', {
+  // 3) 응답이 유실됐을 수 있는 오류에서는 파일을 보존하고 같은 request_id로 결과를 회복한다.
+  const done = await finalizeImageUpload(() => admin.rpc(rpcName, {
     ...base,
     p_images: planned.map((img) => ({ path: img.path, mime: img.mime, bytes: img.bytes.length })),
-  });
-  if (done.error || done.data?.replayed) await admin.storage.from(BUCKET).remove(uploaded);
+  }), uploaded, paths => admin.storage.from(BUCKET).remove(paths));
   if (done.error) return dbFail(done.error);
   return respond(done.data);
 });

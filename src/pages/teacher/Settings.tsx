@@ -7,19 +7,27 @@ import {
 } from '../../lib/kst.ts';
 import type { Term } from '../../lib/types.ts';
 import { useTeacher } from './TeacherLayout.tsx';
+import { PublicTermForm, WeekendTermForm } from './WeekendSettings.tsx';
 
 export default function Settings() {
   const { data } = useTeacher();
-  const [creating, setCreating] = useState(!data.term);
+  const [creating, setCreating] = useState<'daily' | 'weekend' | null>(data.term ? null : 'weekend');
   return (
     <div className="stack">
       <h1>운영 설정</h1>
       <TitleForm />
-      <TermForm key={creating ? 'new' : data.term?.id} term={creating ? null : data.term} onCreated={() => setCreating(false)} />
+      <PublicTermForm />
+      {!data.term && <div className="row"><button className="btn" onClick={() => setCreating('weekend')}>주말 기간 만들기</button><button className="btn ghost" onClick={() => setCreating('daily')}>일반 운영 기간 만들기</button></div>}
+      {(creating === 'weekend' || (!creating && data.term?.submission_mode === 'weekend'))
+        ? <WeekendTermForm key={creating ? 'new-weekend' : data.term?.id} term={creating ? null : data.term} onCreated={() => setCreating(null)} />
+        : <TermForm key={creating ? 'new-daily' : data.term?.id} term={creating ? null : data.term} onCreated={() => setCreating(null)} />}
       {data.term && !creating && (
-        <button className="btn ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setCreating(true)}>+ 새 운영 기간 만들기</button>
+        <div className="row">
+          <button className="btn" onClick={() => setCreating('weekend')}>+ 새 주말 기간 만들기</button>
+          <button className="btn ghost" onClick={() => setCreating('daily')}>+ 새 일반 운영 기간 만들기</button>
+        </div>
       )}
-      {creating && data.term && <button className="btn ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setCreating(false)}>새 운영 기간 만들기 취소</button>}
+      {creating && data.term && <button className="btn ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setCreating(null)}>새 운영 기간 만들기 취소</button>}
       {data.term && !creating && <CalendarEditor />}
       {data.term && !creating && <CleanupPanel />}
       {data.term && !creating && <PurgePanel />}
@@ -121,7 +129,7 @@ function TermForm({ term, onCreated }: { term: Term | null; onCreated: () => voi
           <input type="time" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
         </label>
         <label className="field grow">
-          마지막 제출 허용 시각 <span className="hint">늦은 제출·교체 가능 끝 (KST)</span>
+          마지막 제출 허용 시각 <span className="hint">늦은 제출, 교체 가능 끝 (KST)</span>
           <input type="datetime-local" value={finalClose || (defaultFinal ? toKstLocalInput(defaultFinal) : '')} onChange={(e) => setFinalClose(e.target.value)} />
         </label>
       </div>
@@ -144,27 +152,28 @@ function CalendarEditor() {
   const backend = useBackend();
   const { data, now, reload } = useTeacher();
   const r = useRunner();
+  const weekend = data.term?.submission_mode === 'weekend';
   return (
     <section className="card stack">
       <h2>운영 달력</h2>
-      <p className="small muted">기본은 주말 포함 매일 제출입니다. 수집하지 않을 날짜는 체크를 해제하세요. 각 날짜의 마감은 서버에 고정 저장됩니다.</p>
+      <p className="small muted">{weekend ? '주말 기록일 6개는 고정되어 있습니다. 각 주말의 토요일과 일요일은 다음 월요일에 함께 열리고 같은 시각에 마감됩니다. 이미 열린 날짜의 마감은 유지됩니다.' : '기본은 주말 포함 매일 제출입니다. 수집하지 않을 날짜는 체크를 해제하세요. 각 날짜의 마감은 서버에 고정 저장됩니다.'}</p>
       <div className="table-wrap" style={{ maxHeight: 420 }}>
         <table className="list">
-          <thead><tr><th>기록일</th><th>수집 대상</th><th className="hide-sm">마감</th><th>메모</th></tr></thead>
+          <thead><tr><th>기록일</th><th>수집 대상</th><th className={weekend ? '' : 'hide-sm'}>마감</th><th>메모</th></tr></thead>
           <tbody>
             {data.days.map((d) => (
               <tr key={d.record_date}>
                 <td className="nowrap" style={{ color: isWeekend(d.record_date) ? 'var(--primary)' : undefined }}>{fmtDate(d.record_date)}</td>
                 <td>
                   <label className="check">
-                    <input type="checkbox" checked={d.is_target} disabled={r.busy}
+                    <input type="checkbox" checked={d.is_target} disabled={r.busy || weekend}
                       onChange={(e) => void r.run(async () => { await backend.setDayTarget(d.term_id, d.record_date, e.target.checked, d.note ?? ''); reload(); })} />
                     {d.is_target ? '대상' : '제외'}
                   </label>
                 </td>
-                <td className="hide-sm small nowrap">{fmtDateTime(Date.parse(d.deadline_at))}{Date.parse(d.window_open_at) <= now ? ' (고정)' : ''}</td>
+                <td className={`${weekend ? '' : 'hide-sm'} small nowrap`}>{fmtDateTime(Date.parse(d.deadline_at))}{Date.parse(d.window_open_at) <= now ? ' (고정)' : ''}</td>
                 <td>
-                  <input type="text" maxLength={40} defaultValue={d.note ?? ''} placeholder="예: 학교 행사" aria-label={`${d.record_date} 메모`}
+                  <input type="text" maxLength={40} disabled={weekend} defaultValue={d.note ?? ''} placeholder="예: 학교 행사" aria-label={`${d.record_date} 메모`}
                     onBlur={(e) => { if ((e.target.value || null) !== d.note) void r.run(async () => { await backend.setDayTarget(d.term_id, d.record_date, d.is_target, e.target.value); reload(); }); }} />
                 </td>
               </tr>
@@ -209,7 +218,7 @@ function PurgePanel() {
     <section className="card stack">
       <h2>자료 삭제</h2>
       <p className="small muted">
-        보관 종료일: {term.retention_until ? fmtDate(term.retention_until) : '미설정'} · 자동 삭제 기능은 없습니다. 이 운영 기간의 제출 기록·이미지·사유·면제·교사 메모·운영 달력을 지웁니다. 학생 명단은 남습니다.
+        보관 종료일: {term.retention_until ? fmtDate(term.retention_until) : '미설정'} ,  자동 삭제 기능은 없습니다. 이 운영 기간의 제출 기록, 이미지, 사유, 면제, 교사 메모, 운영 달력을 지웁니다. 학생 명단은 남습니다.
       </p>
       <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={r.busy}
         onClick={() => void r.run(async () => { setResult(null); setPreview(await backend.purgePreview(term.id)); })}>삭제 대상 확인</button>
@@ -217,7 +226,7 @@ function PurgePanel() {
         <div className="banner warn stack">
           <strong>{preview.name} ({preview.start_date} ~ {preview.last_record_date})</strong>
           <p className="small">
-            제출 {preview.submissions}건 · 제출 이력 {preview.submission_events}건 · 사유 {preview.excuse_requests}건 · 면제 {preview.exemptions}건 · 교사 메모 {preview.teacher_notes}건 · 운영 달력 {preview.term_days}일 · 이미지 {preview.objects}개
+            제출 {preview.submissions}건 ,  제출 이력 {preview.submission_events}건 ,  사유 {preview.excuse_requests}건 ,  면제 {preview.exemptions}건 ,  교사 메모 {preview.teacher_notes}건 ,  운영 달력 {preview.term_days}일 ,  이미지 {preview.objects}개
           </p>
           <p className="small">되돌릴 수 없습니다. 이미지(Storage)를 먼저 지우고, 모두 지워졌을 때만 DB 기록을 지웁니다.</p>
           <label className="field">확인을 위해 운영 기간 이름 '{preview.name}'을 입력하세요<input type="text" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} /></label>

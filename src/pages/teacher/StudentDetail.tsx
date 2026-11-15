@@ -25,11 +25,11 @@ export default function StudentDetail() {
         <div className="stack" style={{ gap: 2 }}>
           <h1>{student.student_no} {student.name}</h1>
           <span className="small muted">
-            {student.active ? '활성 · 학번으로 제출' : `비활성(제출 거절)${student.roster_until ? ` · 대상 마지막 날 ${student.roster_until}` : ''}`}
+            {student.active ? '활성 ,  학번으로 제출' : `비활성(제출 거절)${student.roster_until ? ` ,  대상 마지막 날 ${student.roster_until}` : ''}`}
           </span>
         </div>
         <div className="row">
-          {term && streak >= STREAK_MIN && <span className="chip flag" title="현재 시각 기준, 마감이 지난 수집 대상일을 최근부터 거슬러 센 연속 미제출 일수(면제·수집 제외·마감 전 날짜는 건너뜀)">{streak}일 연속 미제출</span>}
+          {term && streak >= STREAK_MIN && <span className="chip flag" title="현재 시각 기준, 마감이 지난 수집 대상일을 최근부터 거슬러 센 연속 미제출 일수(면제, 수집 제외, 마감 전 날짜는 건너뜀)">{streak}일 연속 미제출</span>}
           <Link className="btn sm" to="/teacher">현황으로</Link>
         </div>
       </div>
@@ -41,13 +41,13 @@ export default function StudentDetail() {
           <h2>날짜별 기록</h2>
           <div className="table-wrap">
             <table className="list">
-              <thead><tr><th>기록일</th><th>제출 상태</th><th className="hide-sm">최초 접수</th><th>확인</th><th>사유·메모</th></tr></thead>
+              <thead><tr><th>기록일</th><th>제출 상태</th><th className="hide-sm">최초 접수</th><th>확인</th><th>사유, 메모</th></tr></thead>
               <tbody>
                 {[...data.days].reverse().map((day) => {
                   const k = cellKey(student.id, day.record_date);
                   const sub = board.submissions.get(k) ?? null;
                   const ex = board.excuses.get(k) ?? null;
-                  const state = submitState({ day, student, exempt: board.exemptions.has(k), submission: sub, now });
+                  const state = submitState({ day, student, exempt: board.exemptions.has(k), submission: sub, now, participating: !board.participants || board.participants.has(student.id) });
                   return (
                     <tr key={day.record_date} className="clickable" onClick={() => setOpenDate(day.record_date)}>
                       <td className="nowrap">{fmtDate(day.record_date)}</td>
@@ -55,7 +55,7 @@ export default function StudentDetail() {
                       <td className="hide-sm mono small nowrap">{sub ? fmtShortDateTime(Date.parse(sub.first_submitted_at)) : '–'}</td>
                       <td>{sub ? <ReviewChip status={sub.review_status} /> : <span className="faint">–</span>}</td>
                       <td className="small">
-                        {ex && <div>사유: {EXCUSE_LABEL[ex.reason]}{ex.note ? ` · ${ex.note}` : ''}</div>}
+                        {ex && <div>사유: {EXCUSE_LABEL[ex.reason]}{ex.note ? ` ,  ${ex.note}` : ''}</div>}
                         {sub?.student_note && <div className="muted">메모: {sub.student_note}</div>}
                       </td>
                     </tr>
@@ -78,8 +78,8 @@ export default function StudentDetail() {
 
 /**
  * 사용 기록 비교: 한 학생의 최근 7일/14일 원본 사진을 날짜별로 나란히 놓는다(왼쪽이 오래된 날).
- * 사진 k번은 같은 줄에 맞춰 보이고, 미제출·면제 날짜도 빈 칸으로 남겨 날짜 흐름을 유지한다.
- * 자동 분석·점수·평가는 하지 않는다. 사진은 이 화면에서 보이는 칸만 내려받는다.
+ * 사진 k번은 같은 줄에 맞춰 보이고, 미제출, 면제 날짜도 빈 칸으로 남겨 날짜 흐름을 유지한다.
+ * 자동 분석, 점수, 평가는 하지 않는다. 사진은 이 화면에서 보이는 칸만 내려받는다.
  */
 function CompareSection({ student, onOpen }: { student: Student; onOpen: (date: string, image: number) => void }) {
   const { data, board, now } = useTeacher();
@@ -90,7 +90,7 @@ function CompareSection({ student, onOpen }: { student: Student; onOpen: (date: 
   const cells = days.map((day) => {
     const k = cellKey(student.id, day.record_date);
     const sub = board.submissions.get(k) ?? null;
-    return { day, sub, state: submitState({ day, student, exempt: board.exemptions.has(k), submission: sub, now }) };
+    return { day, sub, state: submitState({ day, student, exempt: board.exemptions.has(k), submission: sub, now, participating: !board.participants || board.participants.has(student.id) }) };
   });
   const rows = Math.max(1, ...cells.map((c) => c.sub?.images.length ?? 0));
 
@@ -119,7 +119,7 @@ function CompareSection({ student, onOpen }: { student: Student; onOpen: (date: 
               <div className="cmp-head">
                 <strong>{fmtShortDate(day.record_date)}</strong>
                 <StateChip state={state} short />
-                <span className="xs muted">{sub ? `사진 ${sub.images.length}장 · ${fmtTime(Date.parse(sub.first_submitted_at))}` : ' '}</span>
+                <span className="xs muted">{sub ? `사진 ${sub.images.length}장 ,  ${fmtTime(Date.parse(sub.first_submitted_at))}` : ' '}</span>
               </div>
               {sub ? (
                 Array.from({ length: rows }, (_, i) => {
@@ -170,8 +170,8 @@ function ExemptionForm({ studentId, termId, start, last, onDone }: { studentId: 
 
   return (
     <section className="card stack">
-      <h2>면제 지정·취소</h2>
-      <p className="small muted">교사가 승인한 날짜만 제출 분모와 미제출 집계에서 빠집니다. 사유 요청·결석만으로 자동 면제되지 않습니다. 이미 접수된 이미지는 지우지 않고 열람할 수 있게 남깁니다.</p>
+      <h2>면제 지정, 취소</h2>
+      <p className="small muted">교사가 승인한 날짜만 제출 분모와 미제출 집계에서 빠집니다. 사유 요청, 결석만으로 자동 면제되지 않습니다. 이미 접수된 이미지는 지우지 않고 열람할 수 있게 남깁니다.</p>
       <div className="row">
         <label className="field">시작일<input type="date" min={start} max={last} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label className="field">종료일<input type="date" min={start} max={last} value={to} onChange={(e) => setTo(e.target.value)} /></label>
@@ -222,7 +222,7 @@ function NotesPanel({ studentId, termId }: { studentId: string; termId: string }
         <div key={n.id} className="card tight stack" style={{ gap: 4 }}>
           <p style={{ whiteSpace: 'pre-wrap' }}>{n.body}</p>
           <div className="row between">
-            <span className="xs muted">{fmtDateTime(Date.parse(n.created_at))}{n.record_date ? ` · ${n.record_date} 관련` : ''}</span>
+            <span className="xs muted">{fmtDateTime(Date.parse(n.created_at))}{n.record_date ? ` ,  ${n.record_date} 관련` : ''}</span>
             <button className="btn sm ghost" onClick={() => void backend.deleteNote(n.id).then(reload, setErr)}>삭제</button>
           </div>
         </div>

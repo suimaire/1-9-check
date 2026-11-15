@@ -33,7 +33,7 @@ function toBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promi
 export async function prepareImage(file: File): Promise<PreparedImage> {
   if (file.size > MAX_SOURCE_BYTES) throw new ImageError('사진 파일이 10MB를 넘습니다. 스크린샷을 다시 찍어 주세요.');
   const kind = await sniff(file);
-  if (!kind) throw new ImageError('JPEG, PNG, WebP 스크린샷만 올릴 수 있습니다. (GIF·SVG·PDF·영상 불가)');
+  if (!kind) throw new ImageError('JPEG, PNG, WebP 스크린샷만 올릴 수 있습니다. (GIF, SVG, PDF, 영상 불가)');
 
   let bitmap: ImageBitmap;
   try {

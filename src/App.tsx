@@ -11,6 +11,7 @@ import Roster from './pages/teacher/Roster.tsx';
 import Settings from './pages/teacher/Settings.tsx';
 import StudentDetail from './pages/teacher/StudentDetail.tsx';
 import TeacherLayout from './pages/teacher/TeacherLayout.tsx';
+import WeekendBoard from './pages/teacher/WeekendBoard.tsx';
 
 /** 교사 화면은 로그인 + 서버에서 읽은 역할(profiles.role=teacher) 기준. 데이터 접근 자체는 RLS가 막는다. */
 function RequireTeacher({ children }: { children: ReactNode }) {
@@ -36,6 +37,7 @@ function AppRoutes() {
       <Route path="/teacher" element={<RequireTeacher><TeacherLayout /></RequireTeacher>}>
         <Route index element={<DayBoard />} />
         <Route path="overview" element={<Overview />} />
+        <Route path="weekends" element={<WeekendBoard />} />
         <Route path="students/:id" element={<StudentDetail />} />
         <Route path="roster" element={<Roster />} />
         <Route path="settings" element={<Settings />} />
@@ -54,7 +56,7 @@ function ConfigError({ message }: { message: string }) {
         <div className="banner error" role="alert">
           <strong>설정 오류 — 앱을 시작하지 않았습니다</strong>
           <p className="small">{message}</p>
-          <p className="small">실제 연결: .env.local에 VITE_APP_MODE=supabase, VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY · 데모: npm run dev:demo</p>
+          <p className="small">실제 연결: .env.local에 VITE_APP_MODE=supabase, VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY ,  데모: npm run dev:demo</p>
         </div>
       </div>
     </div>

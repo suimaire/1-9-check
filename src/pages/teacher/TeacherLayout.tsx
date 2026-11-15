@@ -36,7 +36,7 @@ export default function TeacherLayout() {
       <DemoBar />
       <TopBar
         title={klass?.app_title ?? '1-9 체크'}
-        subtitle={klass ? `${klass.app_subtitle} · ${klass.name} 담임` : undefined}
+        subtitle={klass ? `${klass.app_subtitle} ,  ${klass.name} 담임` : undefined}
         right={
           <div className="row">
             <span className="small strong hide-sm">{me?.displayName}</span>
@@ -47,6 +47,7 @@ export default function TeacherLayout() {
       <nav className="tabs" aria-label="교사 메뉴">
         <NavLink to="/teacher" end>날짜별 현황</NavLink>
         <NavLink to="/teacher/overview">기간 한눈에</NavLink>
+        {data?.term?.submission_mode === 'weekend' && <NavLink to="/teacher/weekends">주말별 현황</NavLink>}
         <NavLink to="/teacher/roster">명단</NavLink>
         <NavLink to="/teacher/settings">운영 설정</NavLink>
       </nav>
@@ -60,13 +61,14 @@ export default function TeacherLayout() {
   }
   if (now === null) return <>{header}<main className="page"><Spinner label="서버 시각 확인 중" /></main></>;
 
-  const board = indexBoard(data.submissions, data.exemptions, data.excuses);
+  const board = indexBoard(data.submissions, data.exemptions, data.excuses, data.term?.submission_mode === 'weekend' ? data.participantIds : undefined);
   const retentionDue = data.term?.retention_until && kstDateOf(now) > data.term.retention_until;
 
   return (
     <>
       {header}
       <main className="page stack">
+        {data.klass.public_term_id && <p className="small muted">학생 화면 공개: <strong>{data.terms.find((t) => t.id === data.klass.public_term_id)?.name ?? '지정된 기간'}</strong>{data.term?.id === data.klass.public_term_id ? ' (현재 보는 기간)' : ''}</p>}
         {data.terms.length > 1 && data.term && (
           <label className="row small">
             운영 기간
@@ -80,7 +82,7 @@ export default function TeacherLayout() {
             보관 종료일({fmtDate(data.term!.retention_until!)})이 지났습니다. 자동 삭제는 하지 않으므로 운영 설정 › 자료 삭제에서 직접 정리해 주세요.
           </div>
         )}
-        <Outlet context={{ data, board, now, reload, setTermId } satisfies TeacherCtx} />
+        <Outlet key={data.term?.id ?? 'no-term'} context={{ data, board, now, reload, setTermId } satisfies TeacherCtx} />
       </main>
     </>
   );

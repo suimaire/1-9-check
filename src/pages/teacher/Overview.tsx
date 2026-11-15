@@ -13,7 +13,7 @@ export default function Overview() {
   const { data, board, now } = useTeacher();
   const [open, setOpen] = useState<{ student: Student; date: string } | null>(null);
   const days = data.days;
-  const students = data.students;
+  const students = useMemo(() => data.students.filter((s) => !board.participants || board.participants.has(s.id)), [data.students, board.participants]);
 
   // 명단 × 운영 달력으로 모든 칸을 만든 뒤 제출을 연결한다(제출 기록만 조회하지 않음)
   const grid = useMemo(() => students.map((student) => ({
@@ -25,7 +25,7 @@ export default function Overview() {
         day,
         submission,
         excuse: board.excuses.get(k) ?? null,
-        state: submitState({ day, student, exempt: board.exemptions.has(k), submission, now }),
+        state: submitState({ day, student, exempt: board.exemptions.has(k), submission, now, participating: !board.participants || board.participants.has(student.id) }),
       };
     }),
   })), [students, days, board, now]);
@@ -62,12 +62,12 @@ export default function Overview() {
       <div className="row between">
         <div className="stack" style={{ gap: 2 }}>
           <h1>기간 한눈에</h1>
-          <span className="small muted">{data.term.name} · {students.length}명 × {days.length}일 · 칸을 누르면 그날 이미지와 상태를 엽니다</span>
+          <span className="small muted">{data.term.name} ,  {students.length}명 × {days.length}일 ,  칸을 누르면 그날 이미지와 상태를 엽니다</span>
         </div>
         <button className="btn" onClick={exportCsv}>상태 요약 CSV</button>
       </div>
-      <div className="legend">{LEGEND.map((s) => <StateChip key={s} state={s} />)}<span className="small muted">✓ 확인 완료 · ! 수정 요청 · ✉ 사유</span></div>
-      <p className="xs muted">표가 화면보다 넓으면 표 안에서 좌우로 밀어 보세요. 학번·이름 열과 날짜 머리글은 고정됩니다.</p>
+      <div className="legend">{LEGEND.map((s) => <StateChip key={s} state={s} />)}<span className="small muted">✓ 확인 완료 ,  ! 수정 요청 ,  ✉ 사유</span></div>
+      <p className="xs muted">표가 화면보다 넓으면 표 안에서 좌우로 밀어 보세요. 학번, 이름 열과 날짜 머리글은 고정됩니다.</p>
 
       <div className="grid-wrap" tabIndex={0} aria-label="학생×날짜 누적 제출표">
         <table className="grid">
@@ -76,7 +76,7 @@ export default function Overview() {
               <th className="sticky-col">학번 이름</th>
               {days.map((d) => (
                 <th key={d.record_date} className={d.is_target ? '' : 'excluded'} title={d.note ?? undefined}>
-                  {fmtShortDate(d.record_date)}<br /><span className="xs">{weekday(d.record_date)}{d.is_target ? '' : '·제외'}</span>
+                  {fmtShortDate(d.record_date)}<br /><span className="xs">{weekday(d.record_date)}{d.is_target ? '' : ', 제외'}</span>
                 </th>
               ))}
               <th>접수/대상</th>
@@ -125,7 +125,7 @@ export default function Overview() {
           </tfoot>
         </table>
       </div>
-      <p className="xs muted">학생별 '접수/대상'은 마감이 지난 대상일 기준이며 순위·점수가 아닙니다. 대상 수는 면제·미대상·마감 전 날짜를 뺀 값입니다.</p>
+      <p className="xs muted">학생별 '접수/대상'은 마감이 지난 대상일 기준이며 순위, 점수가 아닙니다. 대상 수는 면제, 미대상, 마감 전 날짜를 뺀 값입니다.</p>
 
       {open && <CellModal student={open.student} date={open.date} onClose={() => setOpen(null)} />}
     </div>

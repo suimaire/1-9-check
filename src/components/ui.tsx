@@ -168,7 +168,7 @@ export function DemoBar() {
   return (
     <div className="banner demo row" role="note">
       <strong>데모 모드</strong>
-      <span className="small">합성 자료만 사용 · 서버에 저장되지 않음</span>
+      <span className="small">합성 자료만 사용 ,  서버에 저장되지 않음</span>
       <span className="spacer grow" />
       <label className="row small">
         데모 시각

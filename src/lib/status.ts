@@ -1,4 +1,4 @@
-// 제출 상태 판정과 집계. 학생 화면·교사 화면·데모가 같은 규칙을 쓴다.
+// 제출 상태 판정과 집계. 학생 화면, 교사 화면, 데모가 같은 규칙을 쓴다.
 // 접수 시각(first_submitted_at)과 날짜별 마감(deadline_at)은 서버가 정한 값만 사용한다.
 import type { Exemption, Excuse, Student, Submission, TermDay } from './types.ts';
 
@@ -34,9 +34,11 @@ export interface CellInput {
   exempt: boolean;
   submission: Pick<Submission, 'first_submitted_at'> | null;
   now: number;
+  participating?: boolean;
 }
 
-export function submitState({ day, student, exempt, submission, now }: CellInput): SubmitState {
+export function submitState({ day, student, exempt, submission, now, participating = true }: CellInput): SubmitState {
+  if (!participating) return 'not_target';
   if (!day.is_target || !inRoster(student, day.record_date)) return 'not_target';
   if (exempt) return 'exempt';
   if (submission) {
@@ -71,13 +73,15 @@ export type Key = string;
 export const cellKey = (studentId: string, date: string): Key => `${studentId}|${date}`;
 
 export interface Board {
+  participants: Set<string> | null;
   submissions: Map<Key, Submission>;
   exemptions: Set<Key>;
   excuses: Map<Key, Excuse>;
 }
 
-export function indexBoard(submissions: Submission[], exemptions: Exemption[], excuses: Excuse[]): Board {
+export function indexBoard(submissions: Submission[], exemptions: Exemption[], excuses: Excuse[], participantIds?: string[]): Board {
   return {
+    participants: participantIds ? new Set(participantIds) : null,
     submissions: new Map(submissions.map((s) => [cellKey(s.student_id, s.record_date), s])),
     exemptions: new Set(exemptions.map((e) => cellKey(e.student_id, e.record_date))),
     excuses: new Map(excuses.map((e) => [cellKey(e.student_id, e.record_date), e])),
@@ -85,6 +89,7 @@ export function indexBoard(submissions: Submission[], exemptions: Exemption[], e
 }
 
 export interface Row {
+  participating: boolean;
   student: Student;
   state: SubmitState;
   submission: Submission | null;
@@ -97,9 +102,11 @@ export function dayRows(day: TermDay, students: Student[], board: Board, now: nu
     const submission = board.submissions.get(k) ?? null;
     return {
       student,
+      participating: !board.participants || board.participants.has(student.id),
       submission,
       excuse: board.excuses.get(k) ?? null,
-      state: submitState({ day, student, exempt: board.exemptions.has(k), submission, now }),
+      state: submitState({ day, student, exempt: board.exemptions.has(k), submission, now,
+        participating: !board.participants || board.participants.has(student.id) }),
     };
   });
 }
@@ -126,7 +133,7 @@ export function summarize(rows: Row[], day: TermDay): DaySummary {
     missing: 0, exempt: 0, unchecked: 0, checked: 0, revision: 0, excuses: 0,
   };
   for (const r of rows) {
-    if (inRoster(r.student, day.record_date)) s.roster++;
+    if (r.participating && inRoster(r.student, day.record_date)) s.roster++;
     switch (r.state) {
       case 'exempt': s.exempt++; break;
       case 'on_time': s.onTime++; break;
@@ -154,9 +161,10 @@ export const STREAK_MIN = 2;
 /**
  * 연속 미제출 일수(교사 참고용).
  * 최신 날짜부터 거꾸로 보며 마감이 지난 수집 대상일의 미제출을 센다.
- * 정시·지각 접수를 만나면 끊기고, 면제·미대상(수집 제외·명단 범위 밖)·예정·대기(마감 전)는 건너뛴다.
+ * 정시, 지각 접수를 만나면 끊기고, 면제, 미대상(수집 제외, 명단 범위 밖), 예정, 대기(마감 전)는 건너뛴다.
  */
 export function consecutiveMissingCount(student: Student, days: TermDay[], board: Board, now: number): number {
+  if (board.participants && !board.participants.has(student.id)) return 0;
   const sorted = [...days].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
   let count = 0;
   for (const day of sorted) {

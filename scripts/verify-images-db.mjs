@@ -1,6 +1,6 @@
 // 사진 세트(20261007000000_submission_images) 전용 확인 — PGlite에 기존 두 migration을 적용하고
-// 예전 단일 사진 제출을 만든 뒤 새 migration을 적용해 backfill·권한·1~3장 제출·재제출·재시도·정리 대상을 검사한다.
-// Storage API·Edge Function 자체는 실행하지 않는다.
+// 예전 단일 사진 제출을 만든 뒤 새 migration을 적용해 backfill, 권한, 1~3장 제출, 재제출, 재시도, 정리 대상을 검사한다.
+// Storage API, Edge Function 자체는 실행하지 않는다.
 // 실행: node scripts/verify-images-db.mjs
 import { readFileSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
@@ -144,13 +144,13 @@ check('4장 → too_many_images', err(await submit('10901', D, uuid(), null, [im
 check('배열 아님 → bad_request', err(await submit('10901', D, uuid(), null, { path: a })) === 'bad_request');
 check('허용 외 MIME → bad_type', err(await submit('10901', D, uuid(), null, [img(a), img(b, 'image/gif')])) === 'bad_type');
 check('2MB 초과 → too_large', err(await submit('10901', D, uuid(), null, [img(a), img(b, 'image/webp', 2097153)])) === 'too_large');
-check('확장자·MIME 불일치 경로 → bad_path', err(await submit('10901', D, uuid(), null, [img(a, 'image/png')])) === 'bad_path');
+check('확장자, MIME 불일치 경로 → bad_path', err(await submit('10901', D, uuid(), null, [img(a, 'image/png')])) === 'bad_path');
 check('같은 경로 중복 → bad_path', err(await submit('10901', D, uuid(), null, [img(a), img(a)])) === 'bad_path');
 check('다른 학생 경로 섞임 → bad_path', err(await submit('10901', D, uuid(), null, [img(a), img(await put(S04))])) === 'bad_path');
 check('3장 중 1장 업로드 안 됨 → object_missing', err(await submit('10901', D, uuid(), null, [img(a), img(b), img(`${S01}/${TERM}/${uuid()}.webp`)])) === 'object_missing');
 check('이미 쓴(예전) 경로 재사용 → path_reused', err(await submit('10902', D, uuid(), null, [img(legacyPath)])) === 'path_reused');
 const mid = await counts();
-check('실패한 요청은 submission·사진·이벤트를 하나도 만들지 않음', mid.s === before.s && mid.e === before.e && mid.i === before.i);
+check('실패한 요청은 submission, 사진, 이벤트를 하나도 만들지 않음', mid.s === before.s && mid.e === before.e && mid.i === before.i);
 
 // ── 첫 제출(2장) + 재시도 ──
 const req1 = uuid();
@@ -167,8 +167,8 @@ const replay = await submit('10901', D, req1, null, null);
 const replay2 = await submit('10901', D, req1, null, [img(c)]); // 응답 유실 후 같은 request_id로 새 업로드가 와도 반영하지 않음
 const c2 = await counts();
 const row1b = await subOf(S01);
-check('같은 request_id 재시도 → replayed, 사진·제출·이벤트 중복 없음', replay.replayed === true && replay2.replayed === true && c1.s === c2.s && c1.i === c2.i && c1.e === c2.e);
-check('재시도에도 버전·최초 접수 시각 유지', row1b.image_version === 1 && +new Date(row1b.first_submitted_at) === +new Date(row1.first_submitted_at));
+check('같은 request_id 재시도 → replayed, 사진, 제출, 이벤트 중복 없음', replay.replayed === true && replay2.replayed === true && c1.s === c2.s && c1.i === c2.i && c1.e === c2.e);
+check('재시도에도 버전, 최초 접수 시각 유지', row1b.image_version === 1 && +new Date(row1b.first_submitted_at) === +new Date(row1.first_submitted_at));
 
 // ── token 재제출(3장 세트로 전체 교체) ──
 check('token 없이 덮어쓰기 거절', err(await submit('10901', D, uuid(), null, [img(c)])) === 'already_submitted');
@@ -179,7 +179,7 @@ const req2 = uuid();
 const rep = await submit('10901', D, req2, tok, [img(x1), img(x2, 'image/png'), img(x3, 'image/jpeg')]);
 const row2 = await subOf(S01);
 check('교체 → v2, 3장, replaced', rep.version === 2 && rep.replaced === true && rep.image_count === 3 && (await imagesOf(row1.id, 2)).length === 3, JSON.stringify(rep));
-check('교체 → first_submitted_at·정시/지각 판정 유지', +new Date(row2.first_submitted_at) === +new Date(row1.first_submitted_at) && rep.late === first.late);
+check('교체 → first_submitted_at, 정시/지각 판정 유지', +new Date(row2.first_submitted_at) === +new Date(row1.first_submitted_at) && rep.late === first.late);
 check('교체 → 교사 확인 미확인으로', row2.review_status === 'unchecked' && row2.reviewed_version === null);
 check('교체 → 이전 버전 사진 행은 이력으로 남음(v1 2장)', (await imagesOf(row1.id, 1)).length === 2);
 const c3 = await counts();
@@ -203,7 +203,7 @@ check('예전 public_submit 호출 → 1장 세트로 저장', viaOld.version ==
 // ── 정리 대상(고아 객체) ──
 await db.query(`update storage.objects set created_at = now() - interval '2 hours'`);
 const orphans = new Set((await as('service_role', null, `select public.term_object_names($1, true) as n`, [TERM])).rows.map((r) => r.n));
-check('현재 버전 사진(2·3번 포함)은 정리 대상 아님', !orphans.has(y1) && !orphans.has(z) && !orphans.has(legacyPath));
+check('현재 버전 사진(2, 3번 포함)은 정리 대상 아님', !orphans.has(y1) && !orphans.has(z) && !orphans.has(legacyPath));
 check('이전 버전 사진은 정리 대상', [a, b, x1, x2, x3].every((p) => orphans.has(p)));
 
 let failed = 0;

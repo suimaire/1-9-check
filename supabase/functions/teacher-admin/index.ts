@@ -1,4 +1,4 @@
-// 교사 전용 관리 기능(Admin API·Storage API가 필요한 것만). 학생 계정 발급·비밀번호 초기화는 없다(학번 제출).
+// 교사 전용 관리 기능(Admin API, Storage API가 필요한 것만). 학생 계정 발급, 비밀번호 초기화는 없다(학번 제출).
 // 모든 동작에서 호출자가 해당 학급 담당 교사인지 서버 DB로 확인한다.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import {
@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
     return json(req, { ok: true });
   }
 
-  // 현재 제출에 연결되지 않은 이미지(교체 전 이미지·확정 실패 업로드) 정리
+  // 현재 제출에 연결되지 않은 이미지(교체 전 이미지, 확정 실패 업로드) 정리
   if (action === 'cleanup_images') {
     const term = await termInClasses(admin, body.term_id, classes);
     if (!term) return fail(req, 'not_allowed', 403);

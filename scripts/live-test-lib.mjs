@@ -1,5 +1,5 @@
 // 실연결 검증(합성 TEST 계정 전용) 공용 도구.
-// 비밀번호·키는 콘솔에 출력하지 않고 verification.local/live-supabase-e2e/TEST_CREDENTIALS.txt에만 쓴다.
+// 비밀번호, 키는 콘솔에 출력하지 않고 verification.local/live-supabase-e2e/TEST_CREDENTIALS.txt에만 쓴다.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +48,7 @@ export function writeCredentials(map) {
   mkdirSync(OUT_DIR, { recursive: true });
   const lines = [
     '# 1-9 체크 실연결 검증용 합성 TEST 계정 — 실제 학생 계정 아님',
-    '# 로컬 전용 파일. 업로드·공유·커밋 금지. 앱 로그인 화면에는 login_id만 입력한다(내부 이메일 별칭 없음).',
+    '# 로컬 전용 파일. 업로드, 공유, 커밋 금지. 앱 로그인 화면에는 login_id만 입력한다(내부 이메일 별칭 없음).',
     '# 형식: login_id<TAB>현재 비밀번호<TAB>상태',
   ];
   for (const [loginId, { password, note }] of map) lines.push(`${loginId}\t${password}\t${note}`);

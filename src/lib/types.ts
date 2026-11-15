@@ -11,6 +11,7 @@ export interface Me {
 
 export interface ClassInfo {
   id: string;
+  public_term_id?: string | null;
   name: string;
   app_title: string;
   app_subtitle: string;
@@ -18,6 +19,7 @@ export interface ClassInfo {
 
 export interface Term {
   id: string;
+  submission_mode?: 'daily' | 'weekend';
   class_id: string;
   name: string;
   start_date: string;
@@ -41,7 +43,7 @@ export interface Student {
   id: string;
   class_id: string;
   student_no: string;
-  /** 표시명(교사 화면 전용). 공개 제출 화면에는 반환·표시하지 않는다. */
+  /** 표시명(교사 화면 전용). 공개 제출 화면에는 반환, 표시하지 않는다. */
   name: string;
   active: boolean;
   roster_from: string | null;
@@ -82,7 +84,7 @@ export interface Submission {
   resubmit_open: boolean;
   /**
    * 현재 버전의 사진 세트(1~3장, 순서대로). submission_images 행이 없던 예전 제출은
-   * image_path 1장으로 채운다. image_path·image_mime·image_bytes는 1번 사진 값(호환용).
+   * image_path 1장으로 채운다. image_path, image_mime, image_bytes는 1번 사진 값(호환용).
    */
   images: SubmissionImage[];
 }
@@ -120,7 +122,7 @@ export interface TeacherNote {
 
 export const EXCUSE_LABEL: Record<ExcuseReason, string> = {
   no_device: '스마트폰이 없어요',
-  device_unavailable: '기기 고장·보관 중',
+  device_unavailable: '기기 고장, 보관 중',
   no_record: '사용 기록이 안 보여요',
   other: '기타',
 };

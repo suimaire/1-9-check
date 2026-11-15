@@ -7,6 +7,7 @@ import { kstDateOf } from '../../lib/kst.ts';
 import { STUDENT_NOS } from '../../lib/localReceipt.ts';
 import type { Student } from '../../lib/types.ts';
 import { useTeacher } from './TeacherLayout.tsx';
+import { WeekendParticipants } from './WeekendSettings.tsx';
 
 type Kind = 'new' | 'rename' | 'same' | 'problem';
 
@@ -18,6 +19,7 @@ export default function Roster() {
   return (
     <div className="stack">
       <h1>명단</h1>
+      {data.term?.submission_mode === 'weekend' && <WeekendParticipants key={data.term.id} />}
 
       <section className="card stack">
         <div className="row between">
@@ -42,7 +44,7 @@ export default function Roster() {
             </tbody>
           </table>
         </div>
-        <p className="xs muted">비활성화·다시 활성화는 표시명을 눌러 학생 상세에서 합니다. 과거 기록과 인원수는 비활성화 때문에 사라지지 않습니다.</p>
+        <p className="xs muted">비활성화, 다시 활성화는 표시명을 눌러 학생 상세에서 합니다. 과거 기록과 인원수는 비활성화 때문에 사라지지 않습니다.</p>
       </section>
 
       <ImportPanel onDone={reload} classId={data.klass.id} existing={data.students} rosterFromDefault={data.term && now >= Date.parse(data.days[0]?.window_open_at ?? '') ? kstDateOf(now) : null} />
@@ -90,8 +92,8 @@ function ImportPanel({ classId, existing, rosterFromDefault, onDone }: {
 
   return (
     <section className="card stack">
-      <h2>명단 가져오기·표시명 바꾸기</h2>
-      <p className="small muted">엑셀에서 '학번, 표시명' 두 열을 복사해 붙여넣거나 CSV 파일을 선택하세요. 저장 전에 중복·누락을 보여 줍니다. 가져온 자료에 없는 기존 학생은 삭제하지 않습니다.</p>
+      <h2>명단 가져오기, 표시명 바꾸기</h2>
+      <p className="small muted">엑셀에서 '학번, 표시명' 두 열을 복사해 붙여넣거나 CSV 파일을 선택하세요. 저장 전에 중복, 누락을 보여 줍니다. 가져온 자료에 없는 기존 학생은 삭제하지 않습니다.</p>
       <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={'10901\t학생 01\n10902\t학생 02'} rows={5} />
       <label className="btn sm" style={{ alignSelf: 'flex-start', position: 'relative' }}>
         CSV 파일 선택
@@ -105,7 +107,7 @@ function ImportPanel({ classId, existing, rosterFromDefault, onDone }: {
             <span className="chip st-waiting">이름 변경 {counts.rename}</span>
             <span className="chip neutral">동일 {counts.same}</span>
             <span className="chip st-missing">문제 {counts.problem}</span>
-            {notInImport > 0 && <span className="muted">· 가져온 자료에 없는 기존 학생 {notInImport}명(유지)</span>}
+            {notInImport > 0 && <span className="muted">,  가져온 자료에 없는 기존 학생 {notInImport}명(유지)</span>}
           </div>
           {rosterFromDefault && counts.new > 0 && <p className="small muted">운영 중 추가되는 학생은 {rosterFromDefault}부터 제출 대상이 됩니다(학생 '수정'에서 바꿀 수 있음).</p>}
           <div className="table-wrap" style={{ maxHeight: 260 }}>
@@ -115,14 +117,14 @@ function ImportPanel({ classId, existing, rosterFromDefault, onDone }: {
                 {classified.filter((c) => c.kind !== 'same').map((c) => (
                   <tr key={c.line}>
                     <td>{c.line}</td><td className="mono">{c.student_no || '–'}</td><td>{c.name || '–'}</td>
-                    <td className="small">{c.kind === 'new' ? '신규 추가' : c.kind === 'rename' ? `이름 변경(${c.current!.name} → ${c.name})` : <span style={{ color: 'var(--danger)' }}>{c.problem} · 제외</span>}</td>
+                    <td className="small">{c.kind === 'new' ? '신규 추가' : c.kind === 'rename' ? `이름 변경(${c.current!.name} → ${c.name})` : <span style={{ color: 'var(--danger)' }}>{c.problem} ,  제외</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <button className="btn primary" disabled={busy || counts.new + counts.rename === 0} onClick={() => void save()}>
-            {busy ? '저장 중…' : `저장 (신규 ${counts.new} · 변경 ${counts.rename})`}
+            {busy ? '저장 중…' : `저장 (신규 ${counts.new} ,  변경 ${counts.rename})`}
           </button>
         </>
       )}

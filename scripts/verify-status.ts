@@ -60,7 +60,7 @@ check('10/12 기록: 사유 도착(승인 전) 학생은 여전히 미제출로 
 
 const stu = (id: string) => store.students.find((s) => s.id === id) as Student;
 const streak = (id: string, ms: number) => consecutiveMissingCount(stu(id), store.days, board, ms);
-check('데모: s14(10/11·10/12 미제출) → 2', streak('s14', DEMO_CLOCKS[0].ms) === 2);
+check('데모: s14(10/11, 10/12 미제출) → 2', streak('s14', DEMO_CLOCKS[0].ms) === 2);
 check('데모: s27은 마감 전(10/13 대기)이면 2 미만', streak('s27', DEMO_CLOCKS[0].ms) < 2);
 check('데모: s27은 10/13 마감 후 2 이상', streak('s27', DEMO_CLOCKS[2].ms) >= 2);
 

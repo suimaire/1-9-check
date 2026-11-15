@@ -8,7 +8,7 @@ import { cellKey, submitState } from '../../lib/status.ts';
 import { EXCUSE_LABEL, type ReviewStatus, type Student } from '../../lib/types.ts';
 import { useTeacher } from './TeacherLayout.tsx';
 
-/** 학생×날짜 한 칸: 사진 세트·접수 시각·확인 상태·사유·면제를 연다. 사진은 이 창을 열 때만 내려받는다. */
+/** 학생×날짜 한 칸: 사진 세트, 접수 시각, 확인 상태, 사유, 면제를 연다. 사진은 이 창을 열 때만 내려받는다. */
 export function CellModal({ student, date, initialImage = 0, onClose }: {
   student: Student; date: string; initialImage?: number; onClose: () => void;
 }) {
@@ -19,7 +19,8 @@ export function CellModal({ student, date, initialImage = 0, onClose }: {
   const submission = board.submissions.get(k) ?? null;
   const excuse = board.excuses.get(k) ?? null;
   const exempt = board.exemptions.has(k);
-  const state = submitState({ day, student, exempt, submission, now });
+  const participating = !board.participants || board.participants.has(student.id);
+  const state = submitState({ day, student, exempt, submission, now, participating });
 
   const [message, setMessage] = useState(submission?.review_status === 'revision_requested' ? submission.revision_message ?? '' : '');
   const [showRevision, setShowRevision] = useState(false);
@@ -47,11 +48,12 @@ export function CellModal({ student, date, initialImage = 0, onClose }: {
     run(() => backend.reviewSubmission(submission!.id, submission!.image_version, status, message), status === 'checked' ? '확인 완료로 표시했습니다.' : status === 'revision_requested' ? '수정 요청을 보냈습니다.' : '미확인으로 되돌렸습니다.');
 
   return (
-    <Modal title={`${student.student_no} ${student.name} · ${fmtDate(date)}`} onClose={onClose}>
+    <Modal title={`${student.student_no} ${student.name} ,  ${fmtDate(date)}`} onClose={onClose}>
       <div className="row" style={{ gap: 6 }}>
         <StateChip state={state} />
         {submission && <ReviewChip status={submission.review_status} />}
         {exempt && submission && <span className="chip neutral">면제 전 접수 이력 보존</span>}
+        {!participating && <span className="chip neutral">현재 참여 제외, 이전 접수 이력</span>}
         <span className="small muted">마감 {fmtDateTime(Date.parse(day.deadline_at))}</span>
       </div>
 
@@ -61,7 +63,7 @@ export function CellModal({ student, date, initialImage = 0, onClose }: {
           <p className="xs muted">사진을 누르면 원래 크기로 확대됩니다. 파일 접수일 뿐 사용량을 자동 검증한 것이 아닙니다.</p>
           <dl className="kv">
             <dt>최초 접수</dt><dd>{fmtDateTime(Date.parse(submission.first_submitted_at))}</dd>
-            <dt>사진</dt><dd>사진 {submission.images.length}장 · {submission.image_version}번째 제출본 · {fmtDateTime(Date.parse(submission.image_updated_at))} · {fmtBytes(submission.images.reduce((n, i) => n + i.bytes, 0))}</dd>
+            <dt>사진</dt><dd>사진 {submission.images.length}장 ,  {submission.image_version}번째 제출본 ,  {fmtDateTime(Date.parse(submission.image_updated_at))} ,  {fmtBytes(submission.images.reduce((n, i) => n + i.bytes, 0))}</dd>
             <dt>학생 입력 시간</dt><dd>{submission.self_minutes === null ? '입력 없음' : `${fmtMinutes(submission.self_minutes)} (학생 입력값)`}</dd>
             {submission.student_note && (<><dt>학생 메모</dt><dd>{submission.student_note}</dd></>)}
             {submission.revision_message && (<><dt>최근 수정 요청</dt><dd>{submission.revision_message}</dd></>)}
@@ -90,7 +92,7 @@ export function CellModal({ student, date, initialImage = 0, onClose }: {
           {showRevision && (
             <div className="stack">
               <label className="field">
-                수정 요청 내용 <span className="hint">{message.length}/200 · 학생 제출 화면에는 표시되지 않으니 직접 알려 주세요</span>
+                수정 요청 내용 <span className="hint">{message.length}/200 ,  학생 제출 화면에는 표시되지 않으니 직접 알려 주세요</span>
                 <textarea maxLength={200} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="예: 날짜와 총 사용 시간이 함께 보이도록 다시 찍어 주세요." />
               </label>
               <button className="btn primary" disabled={busy || !message.trim()} onClick={() => void review('revision_requested')}>수정 요청 보내기</button>
@@ -107,7 +109,7 @@ export function CellModal({ student, date, initialImage = 0, onClose }: {
             <strong>학생이 보낸 사유</strong>
             <span className="chip info">{excuse.status === 'pending' ? '승인 대기' : excuse.status === 'approved' ? '면제 승인' : '미승인'}</span>
           </div>
-          <p>{EXCUSE_LABEL[excuse.reason]}{excuse.note ? ` · ${excuse.note}` : ''}</p>
+          <p>{EXCUSE_LABEL[excuse.reason]}{excuse.note ? ` ,  ${excuse.note}` : ''}</p>
           <p className="xs muted">전달 {fmtDateTime(Date.parse(excuse.updated_at))}</p>
           {excuse.status !== 'approved' && (
             <div className="row">

@@ -1,4 +1,4 @@
-// 데모 전용 합성 데이터. 실제 학생 정보·스크린샷 없음.
+// 데모 전용 합성 데이터. 실제 학생 정보, 스크린샷 없음.
 // 데모 운영 기간(2026-10-05 ~ 10-16)은 화면 확인용 예시이며 실제 운영 일정이 아니다.
 import { addDays, dateRange, dayWindow, kstStartOf } from '../kst.ts';
 import type {
@@ -13,6 +13,12 @@ export const DEMO_CLOCKS: Array<{ id: string; label: string; ms: number }> = [
   { id: 'before', label: '10/14 07:20 (마감 전)', ms: kstStartOf('2026-10-14') + (7 * 60 + 20) * 60000 },
   { id: 'exact', label: '10/14 08:00 (마감 정각)', ms: kstStartOf('2026-10-14') + 8 * 3600000 },
   { id: 'after', label: '10/14 08:30 (마감 후)', ms: kstStartOf('2026-10-14') + (8 * 60 + 30) * 60000 },
+  { id: 'weekend-sunday', label: '11/22 일요일 (주말 개시 전)', ms: kstStartOf('2026-11-22') + 12 * 3600000 },
+  { id: 'weekend-before', label: '11/23 08:59 (주말 마감 전)', ms: kstStartOf('2026-11-23') + 539 * 60000 },
+  { id: 'weekend-exact', label: '11/23 09:00 (주말 마감 정각)', ms: kstStartOf('2026-11-23') + 540 * 60000 },
+  { id: 'weekend-after', label: '11/23 09:01 (주말 마감 후)', ms: kstStartOf('2026-11-23') + 541 * 60000 },
+  { id: 'weekend-last', label: '12/7 08:30 (마지막 주말)', ms: kstStartOf('2026-12-07') + 510 * 60000 },
+  { id: 'weekend-ended', label: '12/8 00:00 (주말 운영 종료)', ms: kstStartOf('2026-12-08') },
 ];
 
 export interface DemoStore {
@@ -206,7 +212,7 @@ export function buildDemoStore(): DemoStore {
   };
 }
 
-/** 합성 스크린타임 이미지(실제 기기 화면 아님). page 2·3은 추가 화면 예시(앱 이름 없이). */
+/** 합성 스크린타임 이미지(실제 기기 화면 아님). page 2, 3은 추가 화면 예시(앱 이름 없이). */
 export async function renderSyntheticScreenshot(title: string, date: string, minutes: number, page = 1): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
@@ -218,14 +224,14 @@ export async function renderSyntheticScreenshot(title: string, date: string, min
   ctx.fillRect(48, 140, 984, 1340);
   ctx.fillStyle = '#b42318';
   ctx.font = 'bold 44px sans-serif';
-  ctx.fillText('데모용 합성 이미지 · 실제 기록 아님', 72, 90);
+  ctx.fillText('데모용 합성 이미지 ,  실제 기록 아님', 72, 90);
   ctx.fillStyle = '#101828';
   ctx.font = 'bold 64px sans-serif';
   if (page > 1) {
     ctx.fillText(page === 2 ? '항목별 사용 시간 (예시)' : '시간대별 사용 (예시)', 96, 250);
     ctx.font = '44px sans-serif';
     ctx.fillStyle = '#475467';
-    ctx.fillText(`${date} · ${title} · 사진 ${page}`, 96, 330);
+    ctx.fillText(`${date} ,  ${title} ,  사진 ${page}`, 96, 330);
     if (page === 2) {
       ['항목 A', '항목 B', '항목 C', '항목 D', '항목 E'].forEach((label, i) => {
         const v = [0.9, 0.6, 0.45, 0.3, 0.15][i] * (0.6 + ((minutes + i * 37) % 40) / 100);

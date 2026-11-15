@@ -3,7 +3,7 @@
 //  - anon 직접 접근은 publishable key만 가진 클라이언트로 확인
 //  - 교사 확인은 TST-TEACHER 세션(자격 증명은 verification.local/.../TEST_CREDENTIALS.txt, 출력하지 않음)
 // 사용: node --env-file=.env.server scripts/verify-public-live.mjs [--student 10901] [--date YYYY-MM-DD]
-// 같은 학번·날짜로 다시 돌리면 첫 제출 대신 '이미 제출됨'부터 확인한다(기존 TEST 제출을 지우지 않음).
+// 같은 학번, 날짜로 다시 돌리면 첫 제출 대신 '이미 제출됨'부터 확인한다(기존 TEST 제출을 지우지 않음).
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -77,7 +77,7 @@ if (firstTry instanceof BackendError && firstTry.code === 'already_submitted') {
 check('F token 없이 같은 날짜 덮어쓰기 거절', (await code(student.publicSubmit(input({ images: [{ blob: png(2), mime: 'image/png' }] })))) === 'already_submitted');
 check('F 틀린 token 거절', (await code(student.publicSubmit(input({ images: [{ blob: png(2), mime: 'image/png' }], token: 'f'.repeat(64) })))) === 'already_submitted');
 
-// B·H) 교사 Auth·대시보드
+// B, H) 교사 Auth, 대시보드
 const teacher = createSupabaseBackend(URL_, PUB);
 await teacher.signIn(TEACHER.loginId, readCredentials().get(TEACHER.loginId)?.password ?? '');
 const me = await teacher.getMe();
@@ -85,7 +85,7 @@ check('H 교사 로그인 → role=teacher', me?.role === 'teacher' && !me.mustC
 let t = await teacher.loadTeacherData();
 const s = t.students.find((x) => x.student_no === NO);
 const sub = t.submissions.find((x) => x.student_id === s?.id && x.record_date === DATE);
-check('H 교사 대시보드 자료(활성 34명)', t.students.filter((x) => x.active).length === 34, `${t.klass.name} · ${t.term?.name}`);
+check('H 교사 대시보드 자료(활성 34명)', t.students.filter((x) => x.active).length === 34, `${t.klass.name} ,  ${t.term?.name}`);
 check(`B 교사 화면에 ${NO} 제출 반영`, !!sub, sub ? `v${sub.image_version}` : '');
 const img = sub ? await teacher.fetchImage(sub.image_path).catch(() => null) : null;
 check('B 교사 세션으로 비공개 이미지 열람', !!img && img.size > 0);

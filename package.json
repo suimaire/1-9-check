@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "verify:status": "node scripts/verify-status.ts",
+    "verify:weekend": "node scripts/verify-weekend-db.mjs && node scripts/verify-weekend.ts && node scripts/verify-weekend-submit.ts && node scripts/verify-weekend-recovery.ts && node scripts/verify-local-receipt.ts && node scripts/verify-submit-cleanup.ts && node scripts/verify-submit-handler.mjs",
     "verify:db": "node scripts/verify-db.mjs",
     "bootstrap:teacher": "node --env-file=.env.server scripts/bootstrap-teacher.mjs",
     "verify:public-db": "node scripts/verify-public-db.mjs",

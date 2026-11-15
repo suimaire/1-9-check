@@ -8,12 +8,13 @@ export interface TeacherData {
   term: Term | null;
   days: TermDay[];
   students: Student[];
+  participantIds: string[];
   submissions: Submission[];
   excuses: Excuse[];
   exemptions: Exemption[];
 }
 
-/** 공개 제출 화면용 일정(학생 이름·제출 현황 없음) */
+/** 공개 제출 화면용 일정(학생 이름, 제출 현황 없음) */
 export interface PublicDay {
   record_date: string;
   window_open_at: string;
@@ -26,16 +27,17 @@ export interface PublicInfo {
   ready: boolean;
   app_title?: string;
   app_subtitle?: string;
-  term: { name: string; instructions: string; final_close_at: string } | null;
+  term: { id?: string; submission_mode?: 'daily' | 'weekend'; name: string; instructions: string; final_close_at: string } | null;
   /** 지금 제출할 수 있는 대상일(최신순) */
   open_days: PublicDay[];
   next_day: PublicDay | null;
 }
 
 export interface PublicSubmitInput {
+  termId?: string;
   studentNo: string;
   recordDate: string;
-  /** 사진 세트(1~3장, 순서대로). 각 사진은 브라우저에서 압축·메타데이터 제거된 것 */
+  /** 사진 세트(1~3장, 순서대로). 각 사진은 브라우저에서 압축, 메타데이터 제거된 것 */
   images: Array<{ blob: Blob; mime: string }>;
   /** 같은 제출 시도(재시도 포함)에서 유지되는 값 */
   requestId: string;
@@ -67,6 +69,13 @@ export interface TermInput {
   deadlineMinutes: number;
   finalCloseAt: string | null;
   retentionUntil: string | null;
+  instructions: string;
+}
+
+export interface WeekendTermInput {
+  termId: string | null;
+  name: string;
+  deadlineMinutes: number;
   instructions: string;
 }
 
@@ -117,6 +126,7 @@ export interface Backend {
   // 공개 학번 제출(로그인 없음 — 서버 함수만 호출)
   publicInfo(): Promise<PublicInfo>;
   publicSubmit(input: PublicSubmitInput): Promise<PublicSubmitResult>;
+  publicRecover(input: Pick<PublicSubmitInput, 'termId' | 'studentNo' | 'recordDate' | 'requestId'>): Promise<PublicSubmitResult | null>;
 
   // 교사
   loadTeacherData(termId?: string | null): Promise<TeacherData | null>;
@@ -132,6 +142,9 @@ export interface Backend {
   setStudentActive(studentId: string, active: boolean, rosterUntil: string | null): Promise<void>;
   saveClassTitle(classId: string, title: string, subtitle: string): Promise<void>;
   saveTerm(classId: string, input: TermInput): Promise<string>;
+  saveWeekendTerm(classId: string, input: WeekendTermInput): Promise<string>;
+  setPublicTerm(classId: string, termId: string | null): Promise<void>;
+  setTermParticipants(termId: string, studentIds: string[]): Promise<void>;
   setDayTarget(termId: string, date: string, isTarget: boolean, note: string): Promise<void>;
   cleanupImages(termId: string): Promise<{ found: number; deleted: number; failed: number }>;
   purgePreview(termId: string): Promise<PurgePreview>;

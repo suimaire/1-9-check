@@ -1,7 +1,7 @@
 import { BackendError } from './backend/types.ts';
 
 const MESSAGES: Record<string, string> = {
-  network: '서버와 연결되지 않았습니다. 접수되지 않았습니다. 연결을 확인하고 다시 시도해 주세요.',
+  network: '접수 결과를 확인하지 못했습니다. 연결을 확인한 뒤 같은 요청으로 다시 시도해 주세요.',
   invalid_credentials: '아이디 또는 비밀번호가 맞지 않습니다.',
   too_many_attempts: '시도가 너무 많습니다. 15분 뒤 다시 시도해 주세요.',
   invalid_student_no: '1-9반 학번을 확인해 주세요.',
@@ -16,7 +16,13 @@ const MESSAGES: Record<string, string> = {
   date_out_of_range: '운영 기간 밖의 날짜는 제출할 수 없습니다.',
   not_target_day: '이 날짜는 수집 대상이 아닙니다.',
   not_on_roster: '이 날짜는 제출 대상 명단에 포함되지 않습니다.',
-  window_not_open: '아직 하루가 끝나지 않은 날짜입니다. 다음 날 00:00부터 제출할 수 있습니다.',
+  not_participant: '이번 주말 프로그램의 신청자로 등록되어 있지 않습니다. 담임교사에게 확인해 주세요.',
+  term_changed: '제출 운영 기간이 바뀌었습니다. 화면을 새로고침한 뒤 확인해 주세요.',
+  weekend_mode_required: '주말 운영 기간은 주말 운영 설정에서 수정해 주세요.',
+  weekend_schedule_fixed: '이번 주말 프로그램은 지정된 6개 기록일만 수집합니다.',
+  wrong_submission_mode: '주말 운영 기간은 주말 운영 설정에서 수정해 주세요.',
+  weekend_dates_fixed: '이번 주말 프로그램은 지정된 6개 기록일만 수집합니다.',
+  window_not_open: '아직 제출 창이 열리지 않았습니다. 화면에 안내된 시작 시각을 확인해 주세요.',
   window_closed: '제출 허용 기간이 끝났습니다.',
   version_conflict: '다른 기기에서 먼저 제출 내용이 바뀌었습니다. 새로고침 후 확인해 주세요.',
   object_missing: '업로드된 이미지를 찾지 못했습니다. 사진을 다시 선택해 제출해 주세요.',

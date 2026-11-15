@@ -19,7 +19,7 @@ export function revokeAllObjectUrls(): void {
   blobs.clear();
 }
 
-// 같은 화면에서 썸네일·큰 사진이 같은 파일을 두 번 내려받지 않도록 메모리에만 잠깐 둔다(로그아웃 시 비움).
+// 같은 화면에서 썸네일, 큰 사진이 같은 파일을 두 번 내려받지 않도록 메모리에만 잠깐 둔다(로그아웃 시 비움).
 const blobs = new Map<string, Promise<Blob>>();
 const MAX_CACHED = 60;
 
