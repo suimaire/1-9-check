@@ -68,13 +68,14 @@ const reject = (fn, code) => assert.rejects(fn, new RegExp(code));
 await check('migration preserves legacy days, submissions, images, events and objects', async()=> assert.deepEqual(await snapshotLegacy(), before));
 const weekend = (await teach(`select public.save_weekend_term($1,null,'Weekend',540,'Instructions') id`, [cls])).rows[0].id;
 const dates = ['2026-11-21','2026-11-22','2026-11-28','2026-11-29','2026-12-05','2026-12-06'];
-const mondayOpen = ['2026-11-22T15:00:00.000Z','2026-11-22T15:00:00.000Z','2026-11-29T15:00:00.000Z','2026-11-29T15:00:00.000Z','2026-12-06T15:00:00.000Z','2026-12-06T15:00:00.000Z'];
+const allDates = ['2026-11-14','2026-11-15',...dates];
+const mondayOpen = ['2026-11-15T15:00:00.000Z','2026-11-15T15:00:00.000Z','2026-11-22T15:00:00.000Z','2026-11-22T15:00:00.000Z','2026-11-29T15:00:00.000Z','2026-11-29T15:00:00.000Z','2026-12-06T15:00:00.000Z','2026-12-06T15:00:00.000Z'];
 const days = async()=> (await db.query(`select record_date::text,window_open_at,deadline_at from public.term_days where term_id=$1 order by record_date`,[weekend])).rows;
-await check('exactly six dates with each weekend opening together Monday 00:00 / 09:00 KST', async()=> {
- const rows=await days(); assert.deepEqual(rows.map(r=>r.record_date), dates);
+await check('exactly eight dates with each weekend opening together Monday 00:00 / 09:00 KST', async()=> {
+ const rows=await days(); assert.deepEqual(rows.map(r=>r.record_date), allDates);
  for (let i=0;i<rows.length;i++) { const r=rows[i]; const open=new Date(mondayOpen[i]).getTime(); assert.equal(new Date(r.window_open_at).toISOString(),mondayOpen[i]); assert.equal(new Date(r.deadline_at).getTime(),open+9*3600000); }
  const term=(await db.query(`select * from public.terms where id=$1`,[weekend])).rows[0];
- assert.equal(term.submission_mode,'weekend'); assert.equal(new Date(term.final_close_at).toISOString(),'2026-12-07T14:59:59.999Z');
+ assert.equal(new Date(term.start_date).toISOString().slice(0,10),'2026-11-14'); assert.equal(term.submission_mode,'weekend'); assert.equal(new Date(term.final_close_at).toISOString(),'2026-12-07T14:59:59.999Z');
 });
 await check('creation does not pin or change the legacy term',async()=> { const info=await rpc('select public.public_info() r'); assert.equal(info.term.id,legacy); assert.deepEqual(await snapshotLegacy(),before); });
 await check('an unpinned weekend cannot shadow legacy public submission',async()=> {
@@ -92,9 +93,10 @@ await check('teacher RPC authorization and cross-class pin protection',async()=>
  await reject(()=>as('anon',null,`select public.save_weekend_term($1,null,'No',540,'')`,[cls]),'permission denied');
 });
 await teach(`select public.set_public_term($1,$2)`,[cls,weekend]);
+await clock('2026-11-15T12:00:00+09:00');
 await check('pinned info before Monday shows no open dates and identifies the next weekend',async()=> {
  const info=await rpc('select public.public_info() r'); assert.equal(info.term.id,weekend); assert.equal(info.term.submission_mode,'weekend');
- assert.deepEqual(info.open_days,[]); assert.equal(info.next_day.record_date,dates[0]); assert.ok(!JSON.stringify(info).includes(s1));
+ assert.deepEqual(info.open_days,[]); assert.equal(info.next_day.record_date,allDates[0]); assert.ok(!JSON.stringify(info).includes(s1));
 });
 await check('pinned submit cannot fall back to overlapping legacy dates',async()=> { await reject(()=>submit('2026-11-20'),'date_out_of_range'); });
 await check('participant enrollment validation and SELECT privacy',async()=> {
@@ -106,6 +108,25 @@ await check('participant enrollment validation and SELECT privacy',async()=> {
  await reject(()=>teach(`update public.term_participants set active=false`),'permission denied');
  await reject(()=>teach(`update public.classes set public_term_id=null where id=$1`,[cls]),'permission denied');
 });
+await check('November 14 and 15 open together on November 16 with matching 09:00 deadlines',async()=> {
+ await clock('2026-11-15T23:59:59.999+09:00');
+ await reject(()=>submit(allDates[0]),'window_not_open');
+ await db.exec('begin');
+ try {
+  await clock('2026-11-16T00:00:00+09:00');
+  const info=await rpc('select public.public_info() r');
+  assert.deepEqual(info.open_days.map(d=>d.record_date).sort(),allDates.slice(0,2));
+  assert.equal(info.next_day.record_date,dates[0]);
+  for(const day of info.open_days) assert.equal(new Date(day.deadline_at).toISOString(),'2026-11-16T00:00:00.000Z');
+  await clock('2026-11-16T08:59:59.999+09:00');
+  assert.equal((await submit(allDates[0],randomUUID(),await images(weekend))).late,false);
+  await clock('2026-11-16T09:00:00+09:00');
+  assert.equal((await submit(allDates[1],randomUUID(),await images(weekend))).late,false);
+  await teach('select public.set_term_participants($1,$2::uuid[])',[weekend,[s1,s2]]);
+  await clock('2026-11-16T09:00:00.001+09:00');
+  for(const d of allDates.slice(0,2)) assert.equal((await submit(d,randomUUID(),await images(weekend,s2),null,hash,'10902')).late,true);
+ } finally { await db.exec('rollback'); }
+});
 await check('excluded, same-day and future submissions rejected',async()=> {
  await reject(()=>submit(dates[0],randomUUID(),null,null,hash,'10902'),'not_participant');
  await reject(()=>submit(dates[0]),'window_not_open'); await reject(()=>submit(dates[5]),'window_not_open');
@@ -113,9 +134,9 @@ await check('excluded, same-day and future submissions rejected',async()=> {
 await check('Saturday cannot be submitted on Sunday before Monday opens',async()=> {
  await clock('2026-11-22T23:59:59.999+09:00'); await reject(()=>submit(dates[0]),'window_not_open');
 });
-await check('Monday boundary exposes the first pair only',async()=> {
+await check('November 23 exposes both opened pairs without future dates',async()=> {
  await clock('2026-11-23T00:00:00+09:00'); const info=await rpc('select public.public_info() r');
- assert.deepEqual(info.open_days.map(d=>d.record_date).sort(),dates.slice(0,2)); assert.equal(info.next_day.record_date,dates[2]);
+ assert.deepEqual(info.open_days.map(d=>d.record_date).sort(),allDates.slice(0,4)); assert.equal(info.next_day.record_date,dates[2]);
 });
 await clock('2026-11-23T08:59:59+09:00');
 await check('a stale form cannot submit into a different public term',async()=> {
@@ -177,18 +198,18 @@ await check('replacement preserves first submission and all image history; repla
 await check('late initial submission remains separate for the next date',async()=> { const r=await submit(dates[1],randomUUID(),await images(weekend)); assert.equal(r.late,true); assert.equal(r.version,1); });
 await check('teacher deadline edit preserves opened dates and updates only unopened dates',async()=> {
  const old=await days(); await teach(`select public.save_weekend_term($1,$2,'Updated',600,'New')`,[cls,weekend]); const newer=await days();
- for(let i=0;i<6;i++) assert.equal(new Date(newer[i].deadline_at).getTime()-new Date(old[i].deadline_at).getTime(),i<2?0:3600000);
+ for(let i=0;i<allDates.length;i++) assert.equal(new Date(newer[i].deadline_at).getTime()-new Date(old[i].deadline_at).getTime(),i<4?0:3600000);
  await reject(()=>db.query(`update public.term_days set window_open_at=window_open_at+interval '1 minute' where term_id=$1 and record_date=$2`,[weekend,dates[0]]),'deadline_locked');
  await reject(()=>teach(`select public.save_term($1,$2,'Bypass','2026-11-21','2026-12-06',540,null,null,'')`,[cls,weekend]),'wrong_submission_mode');
  await reject(()=>teach(`select public.set_day_target($1,$2,false,'')`,[weekend,dates[0]]),'weekend_dates_fixed');
 });
 await check('deadline equality is on time and one millisecond later is late',async()=> {
- await clock('2026-11-30T00:00:00+09:00'); assert.deepEqual((await rpc('select public.public_info() r')).open_days.map(d=>d.record_date).sort(),dates.slice(0,4));
+ await clock('2026-11-30T00:00:00+09:00'); assert.deepEqual((await rpc('select public.public_info() r')).open_days.map(d=>d.record_date).sort(),allDates.slice(0,6));
  await clock('2026-11-30T10:00:00+09:00'); assert.equal((await submit(dates[2],randomUUID(),await images(weekend))).late,false);
  await clock('2026-11-30T10:00:00.001+09:00'); assert.equal((await submit(dates[3],randomUUID(),await images(weekend))).late,true);
 });
 await check('final close rejects new submission while receipt replay stays available',async()=> {
- await clock('2026-12-07T23:59:59.999+09:00'); assert.deepEqual((await rpc('select public.public_info() r')).open_days.map(d=>d.record_date).sort(),dates); assert.equal((await submit(dates[5],randomUUID(),null,null,hash,'10902')).ready,true);
+ await clock('2026-12-07T23:59:59.999+09:00'); assert.deepEqual((await rpc('select public.public_info() r')).open_days.map(d=>d.record_date).sort(),allDates); assert.equal((await submit(dates[5],randomUUID(),null,null,hash,'10902')).ready,true);
  await clock('2026-12-08T00:00:00+09:00'); await reject(()=>submit(dates[5],randomUUID(),null,null,hash,'10902'),'window_closed');
  assert.equal((await submit(dates[0],req,null,null,hash3)).replayed,true);
  const closedInfo=await rpc('select public.public_info() r'); assert.equal(closedInfo.term.id,weekend); assert.deepEqual(closedInfo.open_days,[]); assert.equal(closedInfo.next_day,null);

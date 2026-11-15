@@ -156,7 +156,7 @@ function CalendarEditor() {
   return (
     <section className="card stack">
       <h2>운영 달력</h2>
-      <p className="small muted">{weekend ? '주말 기록일 6개는 고정되어 있습니다. 각 주말의 토요일과 일요일은 다음 월요일에 함께 열리고 같은 시각에 마감됩니다. 이미 열린 날짜의 마감은 유지됩니다.' : '기본은 주말 포함 매일 제출입니다. 수집하지 않을 날짜는 체크를 해제하세요. 각 날짜의 마감은 서버에 고정 저장됩니다.'}</p>
+      <p className="small muted">{weekend ? '주말 기록일 8개는 고정되어 있습니다. 각 주말의 토요일과 일요일은 다음 월요일에 함께 열리고 같은 시각에 마감됩니다. 이미 열린 날짜의 마감은 유지됩니다.' : '기본은 주말 포함 매일 제출입니다. 수집하지 않을 날짜는 체크를 해제하세요. 각 날짜의 마감은 서버에 고정 저장됩니다.'}</p>
       <div className="table-wrap" style={{ maxHeight: 420 }}>
         <table className="list">
           <thead><tr><th>기록일</th><th>수집 대상</th><th className={weekend ? '' : 'hide-sm'}>마감</th><th>메모</th></tr></thead>

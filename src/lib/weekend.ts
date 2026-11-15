@@ -2,7 +2,7 @@ import type { PublicDay } from './backend/types.ts';
 import { addDays, kstStartOf, weekday } from './kst.ts';
 import type { TermDay } from './types.ts';
 
-export const WEEKEND_SATURDAYS = ['2026-11-21', '2026-11-28', '2026-12-05'] as const;
+export const WEEKEND_SATURDAYS = ['2026-11-14', '2026-11-21', '2026-11-28', '2026-12-05'] as const;
 export const WEEKEND_FINAL_CLOSE = '2026-12-07T14:59:59.999Z';
 
 export function weekendDays(termId: string, deadlineMinutes: number): TermDay[] {

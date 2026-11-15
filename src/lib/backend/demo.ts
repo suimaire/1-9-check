@@ -116,7 +116,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       const days = store.days.filter((d) => d.term_id === t?.id && d.is_target);
       const nowMs = now();
       const open = t && nowMs <= Date.parse(t.final_close_at)
-        ? days.filter((d) => Date.parse(d.window_open_at) <= nowMs).sort((a, b) => (a.record_date < b.record_date ? 1 : -1)).slice(0, 7)
+        ? days.filter((d) => Date.parse(d.window_open_at) <= nowMs).sort((a, b) => (a.record_date < b.record_date ? 1 : -1)).slice(0, t.submission_mode === 'weekend' ? 8 : 7)
         : [];
       const next = days.filter((d) => Date.parse(d.window_open_at) > nowMs).sort((a, b) => (a.record_date < b.record_date ? -1 : 1))[0];
       const pick = (d: (typeof days)[number]) => ({ record_date: d.record_date, window_open_at: d.window_open_at, deadline_at: d.deadline_at });
@@ -351,7 +351,7 @@ export function createDemoBackend(): Backend & { demo: DemoControls } {
       if (input.termId && (!t || t.submission_mode !== 'weekend')) throw new BackendError('not_allowed');
       if (!t) {
         t = { id: uuid(), class_id: classId, name: input.name.trim(), submission_mode: 'weekend',
-          start_date: '2026-11-21', last_record_date: '2026-12-06', deadline_minutes: input.deadlineMinutes,
+          start_date: '2026-11-14', last_record_date: '2026-12-06', deadline_minutes: input.deadlineMinutes,
           final_close_at: WEEKEND_FINAL_CLOSE, retention_until: '2027-01-06', instructions: input.instructions };
         store.terms.push(t);
         store.days.push(...weekendDays(t.id, input.deadlineMinutes));

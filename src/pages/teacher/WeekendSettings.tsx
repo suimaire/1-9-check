@@ -27,7 +27,7 @@ export function WeekendTermForm({ term, onCreated }: { term: Term | null; onCrea
   }
   return <section className="card stack">
     <h2>{term ? '주말 운영 기간' : '새 주말 운영 기간'}</h2>
-    <p className="small muted">2026년 11월 21일과 22일, 11월 28일과 29일, 12월 5일과 6일의 기록을 수집합니다. 각 주말 두 날짜의 제출은 다음 월요일 00:00 KST에 함께 열립니다.</p>
+    <p className="small muted">2026년 11월 14일과 15일, 11월 21일과 22일, 11월 28일과 29일, 12월 5일과 6일의 기록을 수집합니다. 각 주말 두 날짜의 제출은 다음 월요일 00:00 KST에 함께 열립니다.</p>
     <label className="field">프로그램 이름<input maxLength={40} value={name} onChange={(e) => setName(e.target.value)} /></label>
     <label className="field">월요일 마감 시각 (KST)<input type="time" min="00:01" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></label>
     <p className="xs muted">기본 마감은 월요일 09:00입니다. 변경한 시각은 아직 열리지 않은 주말에만 적용되며, 실제 마감은 아래 운영 달력에서 확인할 수 있습니다.</p>
