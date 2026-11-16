@@ -120,7 +120,6 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
     ? '1-9반 학번을 확인해 주세요.' : null;
   const receipt = validNo ? getReceipt(studentNo, day.record_date) : null;
   const token = validNo ? getToken(studentNo, day.record_date) : null;
-  const beforeDeadline = now <= Date.parse(day.deadline_at);
   const yesterday = addDays(kstDateOf(now), -1) === day.record_date;
 
   const selfMinutes = useMemo(() => {
@@ -256,7 +255,7 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
         <div className="stack" style={{ gap: 2 }}>
           <span className="strong">{fmtDate(day.record_date)} 사용 기록{yesterday ? ' (어제)' : ''}</span>
           <span className="small muted">
-            마감 {fmtDateTime(Date.parse(day.deadline_at))} ,  {beforeDeadline ? <span className="chip st-waiting">마감 전</span> : <span className="chip st-late">마감 지남 ,  지금 내면 지각 접수</span>}
+            마감 {fmtDateTime(Date.parse(day.deadline_at))}
           </span>
         </div>
 
@@ -264,14 +263,14 @@ function SubmitForm({ info, now }: { info: PublicInfo; now: number }) {
           <div className="banner ok" role="status">
             <strong>{phase.result.replayed ? '이미 접수된 제출입니다.' : phase.result.replaced ? '사진이 교체되었습니다.' : '접수되었습니다.'}</strong>
             <p className="small">
-              {phase.studentNo} ,  {fmtDate(phase.result.record_date)} 기록{phase.result.image_count ? ` ,  사진 ${phase.result.image_count}장` : ''} ,  최초 접수 {fmtDateTime(Date.parse(phase.result.first_submitted_at))} ,  {phase.result.late ? '지각 접수' : '정시 접수'}
+              {phase.studentNo} ,  {fmtDate(phase.result.record_date)} 기록{phase.result.image_count ? ` ,  사진 ${phase.result.image_count}장` : ''} ,  최초 접수 {fmtDateTime(Date.parse(phase.result.first_submitted_at))}
             </p>
             <p className="xs">파일 접수 확인일 뿐, 사용 시간 내용을 자동 검증한 것은 아닙니다.</p>
           </div>
         )}
         {phase.kind !== 'done' && receipt && (
           <div className="banner info small">
-            이 기기에서 {fmtDate(day.record_date)} 기록을 이미 제출했습니다 (최초 접수 {fmtDateTime(Date.parse(receipt.firstSubmittedAt))} ,  {receipt.late ? '지각' : '정시'}).
+            이 기기에서 {fmtDate(day.record_date)} 기록을 이미 제출했습니다 (최초 접수 {fmtDateTime(Date.parse(receipt.firstSubmittedAt))}).
             {token ? ' 사진을 다시 골라 제출하면 사진 전체가 새 사진으로 교체됩니다.' : ' 교체하려면 담임 선생님께 알려 주세요.'}
           </div>
         )}

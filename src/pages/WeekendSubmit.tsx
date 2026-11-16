@@ -190,7 +190,6 @@ function WeekendForm({ pair, info, now, earlier, onSelect }: {
       <div>
         <p className="strong">제출 대상: {fmtDate(pair.saturday.record_date)} ~ {fmtDate(pair.sunday.record_date)}</p>
         <p className="small muted">마감: {fmtDateTime(Date.parse(pair.saturday.deadline_at))} (KST)</p>
-        {now > Date.parse(pair.saturday.deadline_at) && <p className="small">마감이 지나 지금 내면 지각 접수됩니다.</p>}
       </div>
       {earlier.length > 1 && <details className="fold"><summary>다른 주말 선택</summary><div className="row">
         {earlier.map(p => <button className="btn sm" key={p.saturday.record_date} disabled={locked || started || drafts.some(d => d.picked.length > 0)}
@@ -205,7 +204,7 @@ function WeekendForm({ pair, info, now, earlier, onSelect }: {
         return <div key={day.record_date} className="weekend-day stack">
           <h2>{label}, {fmtDate(day.record_date)}</h2>
           {attempt?.result ? <div className="banner ok" role="status"><strong>{label}: 접수 완료</strong>
-            <p className="small">사진 {attempt.result.image_count ?? d.picked.length}장, {attempt.result.late ? '지각' : '정시'} 접수
+            <p className="small">사진 {attempt.result.image_count ?? d.picked.length}장 접수
               {attempt.result.replaced ? ' (사진 교체)' : ''}</p></div> : <>
             {receipt && <p className="small muted">이 기기의 이전 접수 기록이 있습니다. 다시 제출하면 해당 날짜 사진 전체를 교체합니다.</p>}
             <div className="row between"><span>스크린타임 사진</span><span className="small muted">{d.picked.length}/3장</span></div>
